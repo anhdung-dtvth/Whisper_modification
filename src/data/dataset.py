@@ -106,15 +106,41 @@ class SignLanguageDataset(Dataset):
         for fname in sorted(os.listdir(features_dir)):
             if fname.endswith(".npy"):
                 sample_id = fname.replace(".npy", "")
-                label_path = os.path.join(labels_dir, fname)
+                label_fname = fname
+            elif fname.endswith(".npz"):
+                sample_id = fname.replace(".npz", "")
+                # label file may be .npz or .npy
+                label_fname = fname
+            else:
+                continue
 
-                samples.append({
-                    "id": sample_id,
-                    "feature_path": os.path.join(features_dir, fname),
-                    "label_path": label_path if os.path.exists(label_path) else None,
-                })
+            label_path = os.path.join(labels_dir, label_fname)
+            if not os.path.exists(label_path):
+                # try the other extension
+                alt_ext = ".npy" if fname.endswith(".npz") else ".npz"
+                alt_path = os.path.join(labels_dir, sample_id + alt_ext)
+                label_path = alt_path if os.path.exists(alt_path) else None
+
+            samples.append({
+                "id": sample_id,
+                "feature_path": os.path.join(features_dir, fname),
+                "label_path": label_path,
+            })
 
         return samples
+
+    @staticmethod
+    def _load_array(path: str) -> np.ndarray:
+        """Load array from .npy or .npz file.
+        For .npz, tries keys 'data', 'features', 'labels', then falls back to first key.
+        """
+        if path.endswith(".npz"):
+            f = np.load(path)
+            for key in ("data", "features", "labels", "arr_0"):
+                if key in f:
+                    return f[key]
+            return f[list(f.keys())[0]]
+        return np.load(path)
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -123,7 +149,7 @@ class SignLanguageDataset(Dataset):
         sample = self.samples[idx]
 
         # Load features
-        features = np.load(sample["feature_path"])  # (T_raw, 42, F)
+        features = self._load_array(sample["feature_path"])  # (T_raw, 42, F)
         actual_length = min(features.shape[0], self.max_seq_length)
 
         # Normalize
@@ -143,7 +169,7 @@ class SignLanguageDataset(Dataset):
 
         # Load labels
         if sample["label_path"] is not None:
-            labels = np.load(sample["label_path"]).astype(np.int64)
+            labels = self._load_array(sample["label_path"]).astype(np.int64)
         else:
             labels = np.array([], dtype=np.int64)
 

@@ -12,9 +12,18 @@ Leap Motion SDK differences from MediaPipe:
 
 This module handles:
   1. Joint reordering: Leap Motion bone order → MediaPipe landmark order
-  2. Coordinate normalization: mm → normalized [0,1] range
+  2. Coordinate normalization: mm → normalized [0,1] range (optional)
   3. Velocity computation: using np.gradient
   4. Real-time streaming: accumulate frames from Leap Motion callback
+
+Joint mapping (Leap → MediaPipe):
+  Each Leap finger has 4 bones: Metacarpal, Proximal, Intermediate, Distal.
+  Each bone has prev_joint (start) and next_joint (end).
+  MediaPipe landmarks correspond to the END (next_joint) of each bone:
+    bone[0].next_joint → MCP/CMC
+    bone[1].next_joint → PIP/MCP
+    bone[2].next_joint → DIP/IP
+    bone[3].next_joint → TIP
 
 Usage:
   adapter = LeapMotionAdapter()
@@ -29,6 +38,7 @@ Usage:
   # Then use with the model
   model.decode(keypoints, lengths)
 """
+import threading
 import numpy as np
 from typing import List, Dict, Optional, Tuple
 
@@ -48,12 +58,11 @@ from typing import List, Dict, Optional, Tuple
 #   Bone 0: Metacarpal (base), Bone 1: Proximal,
 #   Bone 2: Intermediate (or IP for thumb), Bone 3: Distal
 #   Each bone has a prev_joint (start) and next_joint (end)
+#
+# Mapping: ALL bones use next_joint (= tip of bone = joint position)
+#   This matches lmc_capture.py._extract_hand_joints()
 # =================================================================
 
-# Maps (finger_name, joint_index) to MediaPipe landmark index
-# Leap Motion fingers: "thumb"=0, "index"=1, "middle"=2, "ring"=3, "pinky"=4
-# For each finger, we use the bone start/end joints to reconstruct
-# the MediaPipe landmark positions.
 LEAP_FINGER_NAMES = ["thumb", "index", "middle", "ring", "pinky"]
 
 # MediaPipe landmark indices for each finger's joints
@@ -77,14 +86,17 @@ class LeapMotionAdapter:
 
     def __init__(
         self,
-        normalize_coords: bool = True,
+        normalize_coords: bool = False,
         norm_range: Tuple[float, float] = (0.0, 1.0),
         sensor_range_mm: float = 500.0,
         fps: float = 120.0,
     ):
         """
         Args:
-            normalize_coords: If True, normalize mm coordinates to [0, 1]
+            normalize_coords: If True, normalize mm coordinates to [0, 1].
+                Default False — keeps raw mm, matching what the training
+                pipeline (SpatialNorm → ScaleNorm) and the inference
+                pipeline (RealTimePreprocessor) expect.
             norm_range: Target range for normalization
             sensor_range_mm: Approximate interaction range in mm (for normalization)
                 Leap Motion effective range is roughly ±250mm in x/z, 50-600mm in y
@@ -95,8 +107,9 @@ class LeapMotionAdapter:
         self.sensor_range_mm = sensor_range_mm
         self.fps = fps
 
-        # Buffer for real-time frame accumulation
+        # Buffer for real-time frame accumulation (thread-safe)
         self._frame_buffer: List[np.ndarray] = []
+        self._buffer_lock = threading.Lock()
 
     def convert_frame(
         self,
@@ -130,12 +143,12 @@ class LeapMotionAdapter:
             # Wrist (MediaPipe index 0)
             wrist_pos = hand.get("wrist_position")
             if wrist_pos is None:
-                # Fall back to palm position if wrist not available
                 wrist_pos = hand.get("palm_position", [0, 0, 0])
             frame[offset + 0, :3] = self._normalize_point(wrist_pos)
             frame[offset + 0, 6] = confidence
 
-            # Fingers
+            # Fingers: use next_joint for ALL bones (= joint tip position)
+            # This matches lmc_capture.py._extract_hand_joints()
             fingers = hand.get("fingers", [])
             for finger_idx, finger in enumerate(fingers):
                 if finger_idx >= 5:
@@ -148,12 +161,9 @@ class LeapMotionAdapter:
                         break
                     mp_joint_idx = mp_indices[bone_idx]
 
-                    if bone_idx < 3:
-                        # For first 3 joints: use the start of the bone
-                        pos = bone.get("prev_joint", [0, 0, 0])
-                    else:
-                        # For TIP (last joint): use the end of the last bone
-                        pos = bone.get("next_joint", [0, 0, 0])
+                    # FIX: Always use next_joint (end of bone = joint position)
+                    # prev_joint gives the WRONG position (off by one bone)
+                    pos = bone.get("next_joint", [0, 0, 0])
 
                     frame[offset + mp_joint_idx, :3] = self._normalize_point(pos)
                     frame[offset + mp_joint_idx, 6] = confidence
@@ -170,24 +180,14 @@ class LeapMotionAdapter:
           - Y: up from sensor (mm), typically 50-600mm
           - Z: toward/away from screen (mm)
 
-        MediaPipe coordinate system:
-          - X, Y: normalized to [0, 1] relative to image
-          - Z: relative depth
-
-        We map Leap coords to [0, 1] for compatibility.
+        We map Leap coords to [0, 1] for compatibility when normalize_coords=True.
         """
         pt = np.array(point, dtype=np.float32)
 
         if self.normalize_coords:
-            # Normalize to [0, 1] range
-            # X: center at 0, range roughly ±sensor_range/2
             pt[0] = (pt[0] / self.sensor_range_mm) + 0.5
-            # Y: starts at ~50mm above sensor, normalize
             pt[1] = pt[1] / self.sensor_range_mm
-            # Z: center at 0, range roughly ±sensor_range/2
             pt[2] = (pt[2] / self.sensor_range_mm) + 0.5
-
-            # Clamp to [0, 1]
             pt = np.clip(pt, 0.0, 1.0)
 
         return pt
@@ -195,16 +195,19 @@ class LeapMotionAdapter:
     def add_frame(self, hands: List[Dict]):
         """
         Add a frame to the internal buffer (for real-time streaming).
+        Thread-safe — can be called from LMC callback thread.
 
         Args:
             hands: List of hand dicts (same format as convert_frame)
         """
         frame = self.convert_frame(hands)
-        self._frame_buffer.append(frame)
+        with self._buffer_lock:
+            self._frame_buffer.append(frame)
 
     def get_sequence(self, clear_buffer: bool = True) -> np.ndarray:
         """
         Get the accumulated sequence with velocities computed.
+        Thread-safe — can be called from main thread while add_frame runs.
 
         Args:
             clear_buffer: If True, clear the buffer after retrieving
@@ -212,20 +215,22 @@ class LeapMotionAdapter:
         Returns:
             keypoints: (T, 42, 7) numpy array with velocities computed
         """
-        if not self._frame_buffer:
-            return np.zeros((0, 42, 7), dtype=np.float32)
+        with self._buffer_lock:
+            if not self._frame_buffer:
+                return np.zeros((0, 42, 7), dtype=np.float32)
 
-        sequence = np.stack(self._frame_buffer)  # (T, 42, 7)
+            sequence = np.stack(self._frame_buffer)  # (T, 42, 7)
+
+            if clear_buffer:
+                self._frame_buffer.clear()
+
         sequence = self._compute_velocities(sequence)
-
-        if clear_buffer:
-            self._frame_buffer.clear()
-
         return sequence
 
     def clear_buffer(self):
         """Clear the frame buffer."""
-        self._frame_buffer.clear()
+        with self._buffer_lock:
+            self._frame_buffer.clear()
 
     def _compute_velocities(self, keypoints: np.ndarray) -> np.ndarray:
         """
@@ -277,8 +282,6 @@ class LeapMotionAdapter:
         keypoints = np.zeros((T, 42, 7), dtype=np.float32)
         offset = 0 if hand_type == "left" else 21
 
-        # Try to find coordinate columns
-        # Pattern 1: wrist_x, wrist_y, wrist_z, thumb_cmc_x, ...
         joint_names = [
             "wrist",
             "thumb_cmc", "thumb_mcp", "thumb_ip", "thumb_tip",
@@ -319,7 +322,7 @@ class LeapMotionAdapter:
         Returns:
             keypoints: (T, 42, 7) numpy array
         """
-        self._frame_buffer.clear()
+        self.clear_buffer()
         for frame in frames:
             hands = frame.get("hands", [])
             self.add_frame(hands)
@@ -370,7 +373,8 @@ class LeapMotionAdapter:
 
         elif input_format == "bones":
             # (T, 20, 6) → each bone has [start_x,y,z, end_x,y,z]
-            # Use bone starts for first 3 joints of each finger, bone end for TIP
+            # FIX: Use next_joint (end) for ALL bones, matching convert_frame
+            # Also assign wrist from bone[0].prev_joint (metacarpal base)
             for finger_idx in range(5):
                 mp_indices = MEDIAPIPE_FINGER_LANDMARKS[finger_idx]
                 for bone_idx in range(4):
@@ -378,10 +382,8 @@ class LeapMotionAdapter:
                     if bone_data_idx >= data.shape[1]:
                         break
                     mp_joint = mp_indices[bone_idx]
-                    if bone_idx < 3:
-                        pos = data[:, bone_data_idx, :3]  # prev_joint
-                    else:
-                        pos = data[:, bone_data_idx, 3:6]  # next_joint (TIP)
+                    # Always use next_joint (columns 3:6)
+                    pos = data[:, bone_data_idx, 3:6]
                     coords = pos.copy()
                     if self.normalize_coords:
                         coords[:, 0] = (coords[:, 0] / self.sensor_range_mm) + 0.5
@@ -390,6 +392,17 @@ class LeapMotionAdapter:
                         coords = np.clip(coords, 0, 1)
                     keypoints[:, offset + mp_joint, :3] = coords
                     keypoints[:, offset + mp_joint, 6] = 1.0
+
+            # Wrist: use prev_joint of first bone (metacarpal base)
+            if data.shape[1] > 0:
+                wrist_pos = data[:, 0, :3].copy()  # prev_joint of first bone
+                if self.normalize_coords:
+                    wrist_pos[:, 0] = (wrist_pos[:, 0] / self.sensor_range_mm) + 0.5
+                    wrist_pos[:, 1] = wrist_pos[:, 1] / self.sensor_range_mm
+                    wrist_pos[:, 2] = (wrist_pos[:, 2] / self.sensor_range_mm) + 0.5
+                    wrist_pos = np.clip(wrist_pos, 0, 1)
+                keypoints[:, offset + 0, :3] = wrist_pos
+                keypoints[:, offset + 0, 6] = 1.0
 
         keypoints = self._compute_velocities(keypoints)
         return keypoints
