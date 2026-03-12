@@ -1,0 +1,6 @@
+PyQt5>=5.15
+numpy>=1.21
+opencv-python>=4.5
+
+# Optional: Leap Motion hardware support
+# leapc-python-api  # Install from leapc-python-bindings if using real hardware
