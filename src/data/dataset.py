@@ -99,20 +99,42 @@ class SignLanguageDataset(Dataset):
 
         samples = []
 
-        if not os.path.exists(features_dir):
-            # Return empty dataset if directory doesn't exist
-            return samples
+        if os.path.exists(features_dir):
+            # Standard folder-based structure
+            for fname in sorted(os.listdir(features_dir)):
+                if fname.endswith(".npy"):
+                    sample_id = fname.replace(".npy", "")
+                    label_path = os.path.join(labels_dir, fname)
 
-        for fname in sorted(os.listdir(features_dir)):
-            if fname.endswith(".npy"):
-                sample_id = fname.replace(".npy", "")
-                label_path = os.path.join(labels_dir, fname)
-
-                samples.append({
-                    "id": sample_id,
-                    "feature_path": os.path.join(features_dir, fname),
-                    "label_path": label_path if os.path.exists(label_path) else None,
-                })
+                    samples.append({
+                        "id": sample_id,
+                        "feature_path": os.path.join(features_dir, fname),
+                        "label_path": label_path if os.path.exists(label_path) else None,
+                    })
+        elif os.path.exists(split_dir):
+            # Try flat structure: split_dir/sample_00000_feat.npy and split_dir/sample_00000_lab.npy
+            all_files = sorted(os.listdir(split_dir))
+            for fname in all_files:
+                if fname.endswith("_feat.npy") or fname.endswith("_features.npy"):
+                    sample_id = fname.rsplit("_", 1)[0]
+                    # Look for corresponding label
+                    label_fname = fname.replace("_feat.npy", "_lab.npy").replace("_features.npy", "_labels.npy")
+                    label_path = os.path.join(split_dir, label_fname)
+                    
+                    samples.append({
+                        "id": sample_id,
+                        "feature_path": os.path.join(split_dir, fname),
+                        "label_path": label_path if os.path.exists(label_path) else None,
+                    })
+                elif fname.endswith(".npy") and "_lab" not in fname and "_labels" not in fname:
+                    # Fallback for simple sample_00000.npy if no dual structure
+                    # This assumes all .npy files in the folder are features if subfolders are missing
+                    sample_id = fname.replace(".npy", "")
+                    samples.append({
+                        "id": sample_id,
+                        "feature_path": os.path.join(split_dir, fname),
+                        "label_path": None, # Labels unknown in flat structure without naming convention
+                    })
 
         return samples
 

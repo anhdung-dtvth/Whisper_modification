@@ -100,8 +100,40 @@ import numpy as np
 if PROCESS_RAW_KAGGLE_DATA:
     DATA_DIR = os.path.join(PROJECT_DIR, "data", "processed")
 else:
-    # Use the uploaded Dataset directly
-    DATA_DIR = os.path.join(RAW_KAGGLE_DATA_PATH, "Processed")
+    # Aggressively try to find the dataset path
+    DATA_DIR = RAW_KAGGLE_DATA_PATH
+    if not os.path.exists(DATA_DIR) or not os.path.exists(os.path.join(DATA_DIR, "Processed")):
+        print(f"Warning: {DATA_DIR} not found or doesn't have 'Processed'. Searching...")
+        if os.path.exists("/kaggle/input"):
+            for d in os.listdir("/kaggle/input"):
+                potential_base = os.path.join("/kaggle/input", d)
+                # Try sibling or child
+                if os.path.exists(os.path.join(potential_base, "Processed")):
+                    DATA_DIR = potential_base
+                    print(f"Found dataset with 'Processed' folder at: {DATA_DIR}")
+                    break
+                elif "vsl" in d.lower() or "sign" in d.lower():
+                    # Check if 'Processed' exists somewhere inside this dataset
+                    for root, dirs, files in os.walk(potential_base):
+                        if "Processed" in dirs:
+                            DATA_DIR = root
+                            print(f"Found 'Processed' folder inside {potential_base} at: {DATA_DIR}")
+                            break
+                    if "Processed" in os.path.basename(DATA_DIR):
+                        break
+
+    DATA_DIR = os.path.join(DATA_DIR, "Processed")
+    print(f"Using DATA_DIR: {DATA_DIR}")
+    
+    # Verify contents
+    if os.path.exists(DATA_DIR):
+        print(f"Contents of {DATA_DIR}: {os.listdir(DATA_DIR)}")
+        train_path = os.path.join(DATA_DIR, "train")
+        if os.path.exists(train_path):
+            files = os.listdir(train_path)
+            print(f"Found {len(files)} items in {train_path}. First 5: {files[:5]}")
+    else:
+        print(f"CRITICAL: {DATA_DIR} does not exist!")
 
 if PROCESS_RAW_KAGGLE_DATA:
     print("Processing raw Kaggle video data... This will take some time.")
