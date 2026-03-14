@@ -168,6 +168,17 @@ class SignLanguageDataset(Dataset):
 
         return samples
 
+    def _load_numpy(self, path: str) -> np.ndarray:
+        """Safely load .npy or .npz file."""
+        data = np.load(path, allow_pickle=True)
+        if path.lower().endswith(".npz"):
+            # If it's an NpzFile, extract the first array
+            if hasattr(data, 'files') and len(data.files) > 0:
+                return data[data.files[0]]
+            else:
+                raise ValueError(f"Empty or invalid .npz file: {path}")
+        return data
+
     def __len__(self) -> int:
         return len(self.samples)
 
@@ -175,7 +186,15 @@ class SignLanguageDataset(Dataset):
         sample = self.samples[idx]
 
         # Load features
-        features = np.load(sample["feature_path"])  # (T_raw, 42, F)
+        try:
+            features = self._load_numpy(sample["feature_path"])  # (T_raw, 42, F)
+            if not isinstance(features, np.ndarray):
+                raise ValueError(f"Loaded data is not a numpy array: {type(features)}")
+        except Exception as e:
+            print(f"Error loading features from {sample['feature_path']}: {e}")
+            # Fallback to zero features to avoid crashing the whole training
+            features = np.zeros((10, 42, 7), dtype=np.float32)
+
         actual_length = min(features.shape[0], self.max_seq_length)
 
         # Normalize
@@ -195,7 +214,11 @@ class SignLanguageDataset(Dataset):
 
         # Load labels
         if sample["label_path"] is not None:
-            labels = np.load(sample["label_path"]).astype(np.int64)
+            try:
+                labels = self._load_numpy(sample["label_path"]).astype(np.int64)
+            except Exception as e:
+                print(f"Error loading labels from {sample['label_path']}: {e}")
+                labels = np.array([], dtype=np.int64)
         elif sample.get("class_id") is not None:
             # Single gloss per video from Class-Folder structure
             labels = np.array([sample["class_id"]], dtype=np.int64)
