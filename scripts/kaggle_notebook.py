@@ -115,10 +115,20 @@ if PROCESS_RAW_KAGGLE_DATA:
             os.makedirs(DATA_DIR, exist_ok=True)
             
     if not os.path.exists(DATA_DIR) or not os.listdir(DATA_DIR):
+        actual_raw_path = RAW_KAGGLE_DATA_PATH
+        if not os.path.exists(actual_raw_path) or len(os.listdir(actual_raw_path)) == 0:
+            print(f"Warning: {actual_raw_path} not found or empty. Searching /kaggle/input...")
+            if os.path.exists("/kaggle/input"):
+                for d in os.listdir("/kaggle/input"):
+                    if "vsl" in d.lower() or "sign" in d.lower():
+                        actual_raw_path = os.path.join("/kaggle/input", d)
+                        print(f"Auto-detected dataset at: {actual_raw_path}")
+                        break
+
         subprocess.run([
             sys.executable, "scripts/prepare_vsl_data.py", 
             "--source", "kaggle", 
-            "--data_dir", RAW_KAGGLE_DATA_PATH, 
+            "--data_dir", actual_raw_path, 
             "--output_dir", DATA_DIR, 
             "--target_fps", "60"
         ], check=True)
