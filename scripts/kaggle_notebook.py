@@ -23,7 +23,7 @@ USE_GITHUB = True                        # True = clone from GitHub, False = use
 GITHUB_REPO = "minhduc110207/Whisper_modification"  # Your GitHub repo
 KAGGLE_DATASET_SLUG = None               # e.g. "yourname/whispersign" if USE_GITHUB=False
 PROCESS_RAW_KAGGLE_DATA = True           # True = Add 'vsl-vietnamese-sign-languages' via 'Add Data' to process directly on Kaggle
-RAW_KAGGLE_DATA_PATH = "/kaggle/input/vsl-vietnamese-sign-languages/Dataset"
+RAW_KAGGLE_DATA_PATH = "/kaggle/input/vsl-vietnamese-sign-languages"
 USE_DUMMY_DATA = False                    # True = create synthetic data for testing pipeline
 NUM_DUMMY_SAMPLES = 200                  # Number of dummy training samples
 NUM_DUMMY_CLASSES = 50                   # Number of dummy sign classes
