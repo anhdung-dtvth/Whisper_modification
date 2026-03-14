@@ -44,19 +44,34 @@ def prepare_from_kaggle_vsl(data_dir: str, output_dir: str, target_fps: int = 60
     from src.data.preprocessing import resample_to_fixed_rate
 
     print("Loading Kaggle VSL dataset...")
-    label_csv = os.path.join(data_dir, "label.csv")
-    if not os.path.exists(label_csv):
-        # Try alternative locations
-        for alt in ["labels.csv", "metadata.csv", "Labels/label.csv", "Dataset/Labels/label.csv"]:
-            alt_path = os.path.join(data_dir, alt)
-            if os.path.exists(alt_path):
-                label_csv = alt_path
-                break
+    
+    # Robust search for label.csv since Kaggle nests folders unpredictably
+    label_csv = None
+    for root, dirs, files in os.walk(data_dir):
+        if "label.csv" in files:
+            label_csv = os.path.join(root, "label.csv")
+            break
+        elif "labels.csv" in files:
+            label_csv = os.path.join(root, "labels.csv")
+            break
+        elif "metadata.csv" in files:
+            label_csv = os.path.join(root, "metadata.csv")
+            break
+            
+    if not label_csv:
+        print(f"Error: Could not find label.csv anywhere inside {data_dir}.")
+        print("Available files:")
+        for root, dirs, files in os.walk(data_dir):
+            for f in files:
+                print(f"  {os.path.join(root, f)}")
+        sys.exit(1)
 
+    print(f"  Found label mapping at: {label_csv}")
+    
     try:
         df = pd.read_csv(label_csv)
     except FileNotFoundError:
-        print(f"Error: Could not find label.csv in {data_dir}. Is the dataset path correct?")
+        print(f"Error: Could not read {label_csv}")
         sys.exit(1)
         
     print(f"  Found {len(df)} samples")
@@ -85,17 +100,28 @@ def prepare_from_kaggle_vsl(data_dir: str, output_dir: str, target_fps: int = 60
         os.makedirs(feat_dir, exist_ok=True)
         os.makedirs(lab_dir, exist_ok=True)
 
+        # Pre-find the exact videos folder so we don't have to guess
+        videos_dir = None
+        for root, dirs, files in os.walk(data_dir):
+            if "videos" in [d.lower() for d in dirs]:
+                # find exact case
+                exact_name = next(d for d in dirs if d.lower() == "videos")
+                videos_dir = os.path.join(root, exact_name)
+                break
+        
+        if not videos_dir:
+            videos_dir = data_dir # Fallback to root
+
         success = 0
         for i, idx in enumerate(split_indices):
             row = df.iloc[idx]
-            video_path = os.path.join(data_dir, "videos", row["VIDEO"])
+            video_path = os.path.join(videos_dir, row["VIDEO"])
 
             if not os.path.exists(video_path):
-                # Try Kaggle subfolder structure
-                for alt_dir in ["", "Videos", "Dataset/Videos"]:
-                    alt_path = os.path.join(data_dir, alt_dir, row["VIDEO"])
-                    if os.path.exists(alt_path):
-                        video_path = alt_path
+                # Desperate fallback: walk the whole tree looking for this specific file
+                for root, dirs, files in os.walk(data_dir):
+                    if row["VIDEO"] in files:
+                        video_path = os.path.join(root, row["VIDEO"])
                         break
 
             if not os.path.exists(video_path):
