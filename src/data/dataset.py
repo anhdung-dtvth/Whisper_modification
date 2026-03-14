@@ -99,64 +99,72 @@ class SignLanguageDataset(Dataset):
         Supports:
             - split/features/*.npy
             - split/class_name/*.npy
-            - split/*.npy
             - split/any/nested/path/*.npy or .npz
         """
+        import unicodedata
+        def normalize_vn(s):
+            if not s: return ""
+            # Normalize to NFC and strip spaces/lowercasing for fuzzy match
+            s = unicodedata.normalize('NFC', s).strip().lower()
+            return s
+
         split_dir = os.path.join(self.data_dir, self.split)
         samples = []
 
         if not os.path.exists(split_dir):
-            print(f"[{self.split}] CRITICAL: Folder not found: {split_dir}")
+            print(f"[{self.split}] ERROR: Split folder not found at {split_dir}")
             return samples
 
-        print(f"[{self.split}] Scanning for data in: {split_dir}")
+        # Build a normalized label map for fuzzy matching
+        norm_label_map = {}
+        if self.label_map:
+            for k, v in self.label_map.items():
+                norm_label_map[normalize_vn(k)] = v
+
+        print(f"[{self.split}] Scanning recursively in: {split_dir}")
         for root, dirs, files in os.walk(split_dir):
+            rel_dir = os.path.relpath(root, split_dir)
+            
+            # Skip standard features/labels folders if they are empty
+            if rel_dir in ["features", "labels"] and not files:
+                continue
+
             for fname in sorted(files):
                 if not (fname.lower().endswith(".npy") or fname.lower().endswith(".npz")):
                     continue
-                if "_lab" in fname.lower() or "_label" in fname.lower():
+                # Skip files that look like dedicated label files (unless in standard structure)
+                if rel_dir != "labels" and ("_lab" in fname.lower() or "_label" in fname.lower()):
                     continue
 
                 fpath = os.path.join(root, fname)
-                rel_dir = os.path.relpath(root, split_dir)
-                
                 label_path = None
                 class_id = None
 
                 if rel_dir == "features":
-                    # Standard structure: /features and /labels
+                    # Standard structure: features/*.npy paired with labels/*.npy
                     possible_label = os.path.join(split_dir, "labels", fname)
                     if os.path.exists(possible_label):
                         label_path = possible_label
                 elif rel_dir != ".":
                     # Class-Folder structure: /class_name/sample.npy
+                    # We use the folder name AS the class name
                     class_name = os.path.basename(root)
-                    if self.label_map:
-                        class_id = self.label_map.get(class_name)
-                        # Fuzzy match if exact fails
-                        if class_id is None:
-                            search_name = class_name.strip().lower()
-                            for k, v in self.label_map.items():
-                                if k.strip().lower() == search_name:
-                                    class_id = v
-                                    break
-                
+                    class_id = norm_label_map.get(normalize_vn(class_name))
+
                 samples.append({
-                    "id": f"{rel_dir.replace(os.sep, '_')}_{fname}",
+                    "id": f"{rel_dir}_{fname}".replace(os.sep, "_"),
                     "feature_path": fpath,
                     "label_path": label_path,
                     "class_id": class_id,
                 })
 
-        print(f"[{self.split}] Successfully loaded {len(samples)} samples.")
-        if len(samples) == 0:
-            print(f"[{self.split}] WARNING: No data files found! Checked recursion in {split_dir}")
-            # Debug: show what we actually found
-            all_files = []
-            for r, d, f in os.walk(split_dir):
-                for file in f[:2]: all_files.append(os.path.join(r, file))
-                if len(all_files) > 10: break
-            print(f"[{self.split}] Sample of files seen: {all_files}")
+        print(f"[{self.split}] Total samples found: {len(samples)}")
+        if samples and all(s["class_id"] is None and s["label_path"] is None for s in samples[:100]):
+            print(f"[{self.split}] WARNING: No labels found for first 100 samples. Check folder names vs label_map.json.")
+            if self.label_map:
+                example_class = os.path.basename(os.path.dirname(samples[0]["feature_path"]))
+                print(f"[{self.split}] Example folder: '{example_class}' (normalized: '{normalize_vn(example_class)}')")
+                print(f"[{self.split}] First few keys in label_map: {list(self.label_map.keys())[:5]}")
 
         return samples
 

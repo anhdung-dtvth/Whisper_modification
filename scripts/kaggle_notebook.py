@@ -48,11 +48,16 @@ if USE_GITHUB:
             "git", "clone", f"https://github.com/{GITHUB_REPO}.git", PROJECT_DIR
         ], check=True)
     else:
-        print(f"Project already exists at {PROJECT_DIR}")
+        print(f"Updating project at {PROJECT_DIR}...")
+        os.chdir(PROJECT_DIR)
+        subprocess.run(["git", "pull"], check=True)
 elif KAGGLE_DATASET_SLUG:
     # Copy from Kaggle dataset input
     dataset_path = f"/kaggle/input/{KAGGLE_DATASET_SLUG.split('/')[-1]}"
     if os.path.exists(dataset_path):
+        if os.path.exists(PROJECT_DIR):
+            import shutil
+            shutil.rmtree(PROJECT_DIR)
         subprocess.run(["cp", "-r", dataset_path, PROJECT_DIR], check=True)
         print(f"Copied dataset from {dataset_path}")
     else:
@@ -61,7 +66,19 @@ elif KAGGLE_DATASET_SLUG:
         raise FileNotFoundError(f"Dataset {KAGGLE_DATASET_SLUG} not found")
 
 os.chdir(PROJECT_DIR)
-sys.path.insert(0, PROJECT_DIR)
+if PROJECT_DIR not in sys.path:
+    sys.path.insert(0, PROJECT_DIR)
+
+# --- Force reload project modules ---
+def reload_project_modules():
+    import importlib
+    import sys
+    to_reload = [m for m in sys.modules if m.startswith("src.") or m == "src"]
+    for m in to_reload:
+        del sys.modules[m]
+    print(f"Cleared {len(to_reload)} cached project modules.")
+
+reload_project_modules()
 
 # Install dependencies
 deps = ["scipy", "scikit-learn", "pyyaml", "tqdm", "tensorboard", "matplotlib"]
