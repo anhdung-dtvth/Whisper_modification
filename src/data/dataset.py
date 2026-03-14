@@ -82,16 +82,24 @@ class SignLanguageDataset(Dataset):
         else:
             self.augmentor = None
 
+        # Load label map if it exists
+        self.label_map = None
+        label_map_path = os.path.join(self.data_dir, "label_map.json")
+        if os.path.exists(label_map_path):
+            import json
+            with open(label_map_path, "r", encoding="utf-8") as f:
+                self.label_map = json.load(f)
+
         # Load data index
         self.samples = self._load_index()
 
     def _load_index(self) -> List[Dict]:
         """
         Load data index from directory.
-        Expects files organized as:
-            data_dir/{split}/
-                features/  -> .npy files with shape (T, 42, F)
-                labels/    -> .npy files with label indices
+        Supports:
+            1. Folder-based: {split}/features/*.npy + {split}/labels/*.npy
+            2. Flat: {split}/*.npy
+            3. Class-Folder: {split}/{class_name}/*.npy
         """
         split_dir = os.path.join(self.data_dir, self.split)
         features_dir = os.path.join(split_dir, "features")
@@ -113,30 +121,49 @@ class SignLanguageDataset(Dataset):
                         "label_path": label_path if os.path.exists(label_path) else None,
                     })
         elif os.path.exists(split_dir):
-            # Try flat structure: split_dir/sample_00000_feat.npy and split_dir/sample_00000_lab.npy
-            print(f"[{self.split}] Standard structure missing. Trying flat structure in: {split_dir}")
-            all_files = sorted(os.listdir(split_dir))
-            for fname in all_files:
-                if fname.endswith("_feat.npy") or fname.endswith("_features.npy"):
-                    sample_id = fname.rsplit("_", 1)[0]
-                    # Look for corresponding label
-                    label_fname = fname.replace("_feat.npy", "_lab.npy").replace("_features.npy", "_labels.npy")
-                    label_path = os.path.join(split_dir, label_fname)
+            all_items = sorted(os.listdir(split_dir))
+            # Check if it contains subdirectories (Class-Folder structure)
+            subdirs = [d for d in all_items if os.path.isdir(os.path.join(split_dir, d))]
+            
+            if subdirs:
+                print(f"[{self.split}] Detected Class-Folder structure with {len(subdirs)} classes.")
+                for class_name in subdirs:
+                    class_id = None
+                    if self.label_map:
+                        class_id = self.label_map.get(class_name)
                     
-                    samples.append({
-                        "id": sample_id,
-                        "feature_path": os.path.join(split_dir, fname),
-                        "label_path": label_path if os.path.exists(label_path) else None,
-                    })
-                elif fname.endswith(".npy") and "_lab" not in fname and "_labels" not in fname:
-                    # Fallback for simple sample_00000.npy if no dual structure
-                    # This assumes all .npy files in the folder are features if subfolders are missing
-                    sample_id = fname.replace(".npy", "")
-                    samples.append({
-                        "id": sample_id,
-                        "feature_path": os.path.join(split_dir, fname),
-                        "label_path": None, # Labels unknown in flat structure without naming convention
-                    })
+                    class_dir = os.path.join(split_dir, class_name)
+                    for fname in sorted(os.listdir(class_dir)):
+                        if fname.endswith(".npy"):
+                            samples.append({
+                                "id": f"{class_name}_{fname.replace('.npy', '')}",
+                                "feature_path": os.path.join(class_dir, fname),
+                                "label_path": None,
+                                "class_id": class_id,
+                            })
+            else:
+                # Try flat structure: split_dir/sample_00000_feat.npy and split_dir/sample_00000_lab.npy
+                print(f"[{self.split}] Standard structure missing. Trying flat structure in: {split_dir}")
+                for fname in all_items:
+                    if fname.endswith("_feat.npy") or fname.endswith("_features.npy"):
+                        sample_id = fname.rsplit("_", 1)[0]
+                        # Look for corresponding label
+                        label_fname = fname.replace("_feat.npy", "_lab.npy").replace("_features.npy", "_labels.npy")
+                        label_path = os.path.join(split_dir, label_fname)
+                        
+                        samples.append({
+                            "id": sample_id,
+                            "feature_path": os.path.join(split_dir, fname),
+                            "label_path": label_path if os.path.exists(label_path) else None,
+                        })
+                    elif fname.endswith(".npy") and "_lab" not in fname and "_labels" not in fname:
+                        # Fallback for simple sample_00000.npy if no dual structure
+                        sample_id = fname.replace(".npy", "")
+                        samples.append({
+                            "id": sample_id,
+                            "feature_path": os.path.join(split_dir, fname),
+                            "label_path": None,
+                        })
         else:
             print(f"[{self.split}] CRITICAL: Folder not found: {split_dir}")
 
@@ -171,6 +198,9 @@ class SignLanguageDataset(Dataset):
         # Load labels
         if sample["label_path"] is not None:
             labels = np.load(sample["label_path"]).astype(np.int64)
+        elif sample.get("class_id") is not None:
+            # Single gloss per video from Class-Folder structure
+            labels = np.array([sample["class_id"]], dtype=np.int64)
         else:
             labels = np.array([], dtype=np.int64)
 
