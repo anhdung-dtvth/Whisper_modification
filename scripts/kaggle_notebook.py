@@ -22,7 +22,7 @@ How to use:
 USE_GITHUB = True                        # True = clone from GitHub, False = use Kaggle dataset
 GITHUB_REPO = "minhduc110207/Whisper_modification"  # Your GitHub repo
 KAGGLE_DATASET_SLUG = None               # e.g. "yourname/whispersign" if USE_GITHUB=False
-PROCESS_RAW_KAGGLE_DATA = True           # True = Add 'vsl-vietnamese-sign-languages' via 'Add Data' to process directly on Kaggle
+PROCESS_RAW_KAGGLE_DATA = False           # True = Add 'vsl-vietnamese-sign-languages' via 'Add Data' to process directly on Kaggle
 RAW_KAGGLE_DATA_PATH = "/kaggle/input/vsl-vietnamese-sign-languages"
 USE_DUMMY_DATA = False                    # True = create synthetic data for testing pipeline
 NUM_DUMMY_SAMPLES = 200                  # Number of dummy training samples
@@ -97,7 +97,11 @@ print("\n✅ Smoke test passed!")
 # %%
 import numpy as np
 
-DATA_DIR = os.path.join(PROJECT_DIR, "data", "processed")
+if PROCESS_RAW_KAGGLE_DATA:
+    DATA_DIR = os.path.join(PROJECT_DIR, "data", "processed")
+else:
+    # Use the uploaded Dataset directly
+    DATA_DIR = os.path.join(RAW_KAGGLE_DATA_PATH, "Dataset", "Processed")
 
 if PROCESS_RAW_KAGGLE_DATA:
     print("Processing raw Kaggle video data... This will take some time.")
