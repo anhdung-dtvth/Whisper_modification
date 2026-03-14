@@ -100,34 +100,40 @@ import numpy as np
 if PROCESS_RAW_KAGGLE_DATA:
     DATA_DIR = os.path.join(PROJECT_DIR, "data", "processed")
 else:
-    # Aggressively try to find the dataset path
-    DATA_DIR = RAW_KAGGLE_DATA_PATH
-    if not os.path.exists(DATA_DIR) or not os.path.exists(os.path.join(DATA_DIR, "Processed")):
-        print(f"Warning: {DATA_DIR} not found or doesn't have 'Processed'. Searching...")
-        if os.path.exists("/kaggle/input"):
-            print(f"Items in /kaggle/input: {os.listdir('/kaggle/input')}")
-            found_dir = None
-            for d in os.listdir("/kaggle/input"):
-                potential_base = os.path.join("/kaggle/input", d)
-                # Try sibling or child
-                if os.path.exists(os.path.join(potential_base, "Processed")):
-                    found_dir = potential_base
-                    print(f"Found dataset with 'Processed' folder at: {found_dir}")
+    # Ultra-robust dataset discovery
+    print(f"\nScanning /kaggle/input for dataset...")
+    DATA_DIR = None
+    
+    if os.path.exists("/kaggle/input"):
+        inputs = os.listdir("/kaggle/input")
+        print(f"Items in /kaggle/input: {inputs}")
+        
+        # Priority 1: Find a folder that has 'Processed' inside it
+        for d in inputs:
+            potential_base = os.path.join("/kaggle/input", d)
+            for root, dirs, files in os.walk(potential_base):
+                if "Processed" in dirs:
+                    DATA_DIR = os.path.join(root, "Processed")
+                    print(f"SUCCESS: Found 'Processed' folder at {DATA_DIR}")
                     break
-                elif "vsl" in d.lower() or "sign" in d.lower():
-                    # Check if 'Processed' exists somewhere inside this dataset
-                    for root, dirs, files in os.walk(potential_base):
-                        if "Processed" in dirs:
-                            found_dir = root
-                            print(f"Found 'Processed' folder inside {potential_base} at: {found_dir}")
-                            break
-                    if found_dir:
+            if DATA_DIR: break
+            
+        # Priority 2: Find a folder that has 'train' inside it (in case Processed was renamed or nested)
+        if not DATA_DIR:
+            for d in inputs:
+                potential_base = os.path.join("/kaggle/input", d)
+                for root, dirs, files in os.walk(potential_base):
+                    if "train" in dirs:
+                        DATA_DIR = root
+                        print(f"SUCCESS: Found data folder (by 'train' detection) at {DATA_DIR}")
                         break
-            if found_dir:
-                DATA_DIR = found_dir
+                if DATA_DIR: break
 
-    DATA_DIR = os.path.join(DATA_DIR, "Processed")
-    print(f"Using DATA_DIR: {DATA_DIR}")
+    if not DATA_DIR:
+        print(f"CRITICAL WARNING: Could not auto-detect data folder! Defaulting to RAW_KAGGLE_DATA_PATH.")
+        DATA_DIR = os.path.join(RAW_KAGGLE_DATA_PATH, "Processed")
+    
+    print(f"Final DATA_DIR set to: {DATA_DIR}")
     
     # Verify contents
     if os.path.exists(DATA_DIR):
