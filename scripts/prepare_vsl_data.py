@@ -47,13 +47,18 @@ def prepare_from_kaggle_vsl(data_dir: str, output_dir: str, target_fps: int = 60
     label_csv = os.path.join(data_dir, "label.csv")
     if not os.path.exists(label_csv):
         # Try alternative locations
-        for alt in ["labels.csv", "metadata.csv"]:
+        for alt in ["labels.csv", "metadata.csv", "Labels/label.csv", "Dataset/Labels/label.csv"]:
             alt_path = os.path.join(data_dir, alt)
             if os.path.exists(alt_path):
                 label_csv = alt_path
                 break
 
-    df = pd.read_csv(label_csv)
+    try:
+        df = pd.read_csv(label_csv)
+    except FileNotFoundError:
+        print(f"Error: Could not find label.csv in {data_dir}. Is the dataset path correct?")
+        sys.exit(1)
+        
     print(f"  Found {len(df)} samples")
 
     # Build label mapping
@@ -86,7 +91,12 @@ def prepare_from_kaggle_vsl(data_dir: str, output_dir: str, target_fps: int = 60
             video_path = os.path.join(data_dir, "videos", row["VIDEO"])
 
             if not os.path.exists(video_path):
-                video_path = os.path.join(data_dir, row["VIDEO"])
+                # Try Kaggle subfolder structure
+                for alt_dir in ["", "Videos", "Dataset/Videos"]:
+                    alt_path = os.path.join(data_dir, alt_dir, row["VIDEO"])
+                    if os.path.exists(alt_path):
+                        video_path = alt_path
+                        break
 
             if not os.path.exists(video_path):
                 print(f"  [SKIP] Video not found: {row['VIDEO']}")
