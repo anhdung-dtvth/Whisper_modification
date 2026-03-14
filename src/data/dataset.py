@@ -95,79 +95,69 @@ class SignLanguageDataset(Dataset):
 
     def _load_index(self) -> List[Dict]:
         """
-        Load data index from directory.
+        Ultra-robust data discovery using recursive os.walk.
         Supports:
-            1. Folder-based: {split}/features/*.npy + {split}/labels/*.npy
-            2. Flat: {split}/*.npy
-            3. Class-Folder: {split}/{class_name}/*.npy
+            - split/features/*.npy
+            - split/class_name/*.npy
+            - split/*.npy
+            - split/any/nested/path/*.npy or .npz
         """
         split_dir = os.path.join(self.data_dir, self.split)
-        features_dir = os.path.join(split_dir, "features")
-        labels_dir = os.path.join(split_dir, "labels")
-
         samples = []
 
-        if os.path.exists(features_dir):
-            # Standard folder-based structure
-            print(f"[{self.split}] Found standard structure: {features_dir}")
-            for fname in sorted(os.listdir(features_dir)):
-                if fname.endswith(".npy"):
-                    sample_id = fname.replace(".npy", "")
-                    label_path = os.path.join(labels_dir, fname)
+        if not os.path.exists(split_dir):
+            print(f"[{self.split}] CRITICAL: Folder not found: {split_dir}")
+            return samples
 
-                    samples.append({
-                        "id": sample_id,
-                        "feature_path": os.path.join(features_dir, fname),
-                        "label_path": label_path if os.path.exists(label_path) else None,
-                    })
-        elif os.path.exists(split_dir):
-            all_items = sorted(os.listdir(split_dir))
-            # Check if it contains subdirectories (Class-Folder structure)
-            subdirs = [d for d in all_items if os.path.isdir(os.path.join(split_dir, d))]
-            
-            if subdirs:
-                print(f"[{self.split}] Detected Class-Folder structure with {len(subdirs)} classes.")
-                for class_name in subdirs:
-                    class_id = None
+        print(f"[{self.split}] Scanning for data in: {split_dir}")
+        for root, dirs, files in os.walk(split_dir):
+            for fname in sorted(files):
+                if not (fname.lower().endswith(".npy") or fname.lower().endswith(".npz")):
+                    continue
+                if "_lab" in fname.lower() or "_label" in fname.lower():
+                    continue
+
+                fpath = os.path.join(root, fname)
+                rel_dir = os.path.relpath(root, split_dir)
+                
+                label_path = None
+                class_id = None
+
+                if rel_dir == "features":
+                    # Standard structure: /features and /labels
+                    possible_label = os.path.join(split_dir, "labels", fname)
+                    if os.path.exists(possible_label):
+                        label_path = possible_label
+                elif rel_dir != ".":
+                    # Class-Folder structure: /class_name/sample.npy
+                    class_name = os.path.basename(root)
                     if self.label_map:
                         class_id = self.label_map.get(class_name)
-                    
-                    class_dir = os.path.join(split_dir, class_name)
-                    for fname in sorted(os.listdir(class_dir)):
-                        if fname.endswith(".npy"):
-                            samples.append({
-                                "id": f"{class_name}_{fname.replace('.npy', '')}",
-                                "feature_path": os.path.join(class_dir, fname),
-                                "label_path": None,
-                                "class_id": class_id,
-                            })
-            else:
-                # Try flat structure: split_dir/sample_00000_feat.npy and split_dir/sample_00000_lab.npy
-                print(f"[{self.split}] Standard structure missing. Trying flat structure in: {split_dir}")
-                for fname in all_items:
-                    if fname.endswith("_feat.npy") or fname.endswith("_features.npy"):
-                        sample_id = fname.rsplit("_", 1)[0]
-                        # Look for corresponding label
-                        label_fname = fname.replace("_feat.npy", "_lab.npy").replace("_features.npy", "_labels.npy")
-                        label_path = os.path.join(split_dir, label_fname)
-                        
-                        samples.append({
-                            "id": sample_id,
-                            "feature_path": os.path.join(split_dir, fname),
-                            "label_path": label_path if os.path.exists(label_path) else None,
-                        })
-                    elif fname.endswith(".npy") and "_lab" not in fname and "_labels" not in fname:
-                        # Fallback for simple sample_00000.npy if no dual structure
-                        sample_id = fname.replace(".npy", "")
-                        samples.append({
-                            "id": sample_id,
-                            "feature_path": os.path.join(split_dir, fname),
-                            "label_path": None,
-                        })
-        else:
-            print(f"[{self.split}] CRITICAL: Folder not found: {split_dir}")
+                        # Fuzzy match if exact fails
+                        if class_id is None:
+                            search_name = class_name.strip().lower()
+                            for k, v in self.label_map.items():
+                                if k.strip().lower() == search_name:
+                                    class_id = v
+                                    break
+                
+                samples.append({
+                    "id": f"{rel_dir.replace(os.sep, '_')}_{fname}",
+                    "feature_path": fpath,
+                    "label_path": label_path,
+                    "class_id": class_id,
+                })
 
-        print(f"[{self.split}] Dataset initialized with {len(samples)} samples.")
+        print(f"[{self.split}] Successfully loaded {len(samples)} samples.")
+        if len(samples) == 0:
+            print(f"[{self.split}] WARNING: No data files found! Checked recursion in {split_dir}")
+            # Debug: show what we actually found
+            all_files = []
+            for r, d, f in os.walk(split_dir):
+                for file in f[:2]: all_files.append(os.path.join(r, file))
+                if len(all_files) > 10: break
+            print(f"[{self.split}] Sample of files seen: {all_files}")
+
         return samples
 
     def __len__(self) -> int:

@@ -234,12 +234,10 @@ else:
     # Check if data already exists
     train_dir = os.path.join(DATA_DIR, "train")
     if os.path.exists(train_dir):
-        # Check standard or flat structure
-        feat_check = os.path.join(train_dir, "features")
-        if os.path.exists(feat_check):
-            n = len([f for f in os.listdir(feat_check) if f.endswith('.npy')])
-        else:
-            n = len([f for f in os.listdir(train_dir) if f.endswith('.npy')])
+        # Recursive count to match the new dataset logic
+        n = 0
+        for r, d, files in os.walk(train_dir):
+            n += len([f for f in files if f.lower().endswith(('.npy', '.npz'))])
         print(f"Found existing data: {n} training samples")
     else:
         print("ERROR: No data found! Set USE_DUMMY_DATA=True or provide data.")
