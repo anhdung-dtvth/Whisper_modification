@@ -108,17 +108,31 @@ else:
         inputs = os.listdir("/kaggle/input")
         print(f"Items in /kaggle/input: {inputs}")
         
-        # Priority 1: Find a folder that has 'Processed' inside it
-        for d in inputs:
-            potential_base = os.path.join("/kaggle/input", d)
-            for root, dirs, files in os.walk(potential_base):
-                if "Processed" in dirs:
-                    DATA_DIR = os.path.join(root, "Processed")
-                    print(f"SUCCESS: Found 'Processed' folder at {DATA_DIR}")
+        # Priority 1: Check if 'vsl-vietnamese-sign-languages' is exactly in the input
+        if "vsl-vietnamese-sign-languages" in inputs:
+            potential_base = os.path.join("/kaggle/input", "vsl-vietnamese-sign-languages")
+            if os.path.exists(os.path.join(potential_base, "Processed")):
+                DATA_DIR = os.path.join(potential_base, "Processed")
+                print(f"SUCCESS: Found exact dataset path: {DATA_DIR}")
+
+        # Priority 2: Recursive search for 'Processed' folder
+        if not DATA_DIR:
+            for d in inputs:
+                potential_base = os.path.join("/kaggle/input", d)
+                # If current folder IS 'Processed'
+                if d.lower() == "processed":
+                    DATA_DIR = potential_base
+                    print(f"SUCCESS: Current folder is 'Processed': {DATA_DIR}")
                     break
-            if DATA_DIR: break
+                # Search inside
+                for root, dirs, files in os.walk(potential_base):
+                    if "Processed" in dirs:
+                        DATA_DIR = os.path.join(root, "Processed")
+                        print(f"SUCCESS: Found nested 'Processed' folder at {DATA_DIR}")
+                        break
+                if DATA_DIR: break
             
-        # Priority 2: Find a folder that has 'train' inside it (in case Processed was renamed or nested)
+        # Priority 3: Recursive search for 'train' folder
         if not DATA_DIR:
             for d in inputs:
                 potential_base = os.path.join("/kaggle/input", d)
@@ -130,8 +144,11 @@ else:
                 if DATA_DIR: break
 
     if not DATA_DIR:
-        print(f"CRITICAL WARNING: Could not auto-detect data folder! Defaulting to RAW_KAGGLE_DATA_PATH.")
-        DATA_DIR = os.path.join(RAW_KAGGLE_DATA_PATH, "Processed")
+        print(f"CRITICAL WARNING: Auto-detection failed. Using default RAW_KAGGLE_DATA_PATH.")
+        if "Processed" in RAW_KAGGLE_DATA_PATH:
+            DATA_DIR = RAW_KAGGLE_DATA_PATH
+        else:
+            DATA_DIR = os.path.join(RAW_KAGGLE_DATA_PATH, "Processed")
     
     print(f"Final DATA_DIR set to: {DATA_DIR}")
     
