@@ -101,7 +101,7 @@ if PROCESS_RAW_KAGGLE_DATA:
     DATA_DIR = os.path.join(PROJECT_DIR, "data", "processed")
 else:
     # Use the uploaded Dataset directly
-    DATA_DIR = os.path.join(RAW_KAGGLE_DATA_PATH, "Dataset", "Processed")
+    DATA_DIR = os.path.join(RAW_KAGGLE_DATA_PATH, "Processed")
 
 if PROCESS_RAW_KAGGLE_DATA:
     print("Processing raw Kaggle video data... This will take some time.")
