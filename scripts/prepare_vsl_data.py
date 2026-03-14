@@ -47,17 +47,20 @@ def prepare_from_kaggle_vsl(data_dir: str, output_dir: str, target_fps: int = 60
     
     # Robust search for label.csv since Kaggle nests folders unpredictably
     label_csv = None
-    for root, dirs, files in os.walk(data_dir):
-        files_lower = [f.lower() for f in files]
-        if "label.csv" in files_lower:
-            label_csv = os.path.join(root, files[files_lower.index("label.csv")])
-            break
-        elif "labels.csv" in files_lower:
-            label_csv = os.path.join(root, files[files_lower.index("labels.csv")])
-            break
-        elif "metadata.csv" in files_lower:
-            label_csv = os.path.join(root, files[files_lower.index("metadata.csv")])
-            break
+    csv_files = []
+    for root, dirs, files in os.walk(data_dir, followlinks=True):
+        for f in files:
+            if f.lower().endswith('.csv'):
+                csv_files.append(os.path.join(root, f))
+                
+    if csv_files:
+        # Prioritize files with "label" or "metadata" in the name
+        for f in csv_files:
+            if "label" in os.path.basename(f).lower() or "metadata" in os.path.basename(f).lower():
+                label_csv = f
+                break
+        if not label_csv:
+            label_csv = csv_files[0]  # Take the first one found
             
     if not label_csv:
         print(f"Error: Could not find label.csv anywhere inside {data_dir}.")
