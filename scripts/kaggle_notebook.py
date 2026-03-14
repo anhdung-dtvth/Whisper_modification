@@ -101,6 +101,19 @@ DATA_DIR = os.path.join(PROJECT_DIR, "data", "processed")
 
 if PROCESS_RAW_KAGGLE_DATA:
     print("Processing raw Kaggle video data... This will take some time.")
+    
+    # Clean up old dummy data if present
+    label_map_path = os.path.join(DATA_DIR, "label_map.json")
+    if os.path.exists(label_map_path):
+        import json
+        with open(label_map_path) as f:
+            lm = json.load(f)
+        if "sign_1" in lm:
+            print("Detected old synthetic dummy data. Wiping to prepare for real data...")
+            import shutil
+            shutil.rmtree(DATA_DIR)
+            os.makedirs(DATA_DIR, exist_ok=True)
+            
     if not os.path.exists(DATA_DIR) or not os.listdir(DATA_DIR):
         subprocess.run([
             sys.executable, "scripts/prepare_vsl_data.py", 
