@@ -105,22 +105,26 @@ else:
     if not os.path.exists(DATA_DIR) or not os.path.exists(os.path.join(DATA_DIR, "Processed")):
         print(f"Warning: {DATA_DIR} not found or doesn't have 'Processed'. Searching...")
         if os.path.exists("/kaggle/input"):
+            print(f"Items in /kaggle/input: {os.listdir('/kaggle/input')}")
+            found_dir = None
             for d in os.listdir("/kaggle/input"):
                 potential_base = os.path.join("/kaggle/input", d)
                 # Try sibling or child
                 if os.path.exists(os.path.join(potential_base, "Processed")):
-                    DATA_DIR = potential_base
-                    print(f"Found dataset with 'Processed' folder at: {DATA_DIR}")
+                    found_dir = potential_base
+                    print(f"Found dataset with 'Processed' folder at: {found_dir}")
                     break
                 elif "vsl" in d.lower() or "sign" in d.lower():
                     # Check if 'Processed' exists somewhere inside this dataset
                     for root, dirs, files in os.walk(potential_base):
                         if "Processed" in dirs:
-                            DATA_DIR = root
-                            print(f"Found 'Processed' folder inside {potential_base} at: {DATA_DIR}")
+                            found_dir = root
+                            print(f"Found 'Processed' folder inside {potential_base} at: {found_dir}")
                             break
-                    if "Processed" in os.path.basename(DATA_DIR):
+                    if found_dir:
                         break
+            if found_dir:
+                DATA_DIR = found_dir
 
     DATA_DIR = os.path.join(DATA_DIR, "Processed")
     print(f"Using DATA_DIR: {DATA_DIR}")
@@ -205,9 +209,14 @@ if USE_DUMMY_DATA:
     print(f"  Vocab size: {len(label_map)}")
 else:
     # Check if data already exists
-    train_feat = os.path.join(DATA_DIR, "train", "features")
-    if os.path.exists(train_feat):
-        n = len([f for f in os.listdir(train_feat) if f.endswith('.npy')])
+    train_dir = os.path.join(DATA_DIR, "train")
+    if os.path.exists(train_dir):
+        # Check standard or flat structure
+        feat_check = os.path.join(train_dir, "features")
+        if os.path.exists(feat_check):
+            n = len([f for f in os.listdir(feat_check) if f.endswith('.npy')])
+        else:
+            n = len([f for f in os.listdir(train_dir) if f.endswith('.npy')])
         print(f"Found existing data: {n} training samples")
     else:
         print("ERROR: No data found! Set USE_DUMMY_DATA=True or provide data.")
@@ -229,6 +238,12 @@ num_layers = 4 if SMALL_MODEL else 6
 d_ff = 1024 if SMALL_MODEL else 2048
 
 label_map_path = os.path.join(DATA_DIR, "label_map.json")
+if not os.path.exists(label_map_path):
+    # Try looking in the parent directory (root of dataset)
+    parent_label_map = os.path.join(os.path.dirname(DATA_DIR), "label_map.json")
+    if os.path.exists(parent_label_map):
+        label_map_path = parent_label_map
+
 if os.path.exists(label_map_path):
     with open(label_map_path) as f:
         vocab_size = len(json.load(f))

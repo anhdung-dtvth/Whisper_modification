@@ -101,6 +101,7 @@ class SignLanguageDataset(Dataset):
 
         if os.path.exists(features_dir):
             # Standard folder-based structure
+            print(f"[{self.split}] Found standard structure: {features_dir}")
             for fname in sorted(os.listdir(features_dir)):
                 if fname.endswith(".npy"):
                     sample_id = fname.replace(".npy", "")
@@ -113,6 +114,7 @@ class SignLanguageDataset(Dataset):
                     })
         elif os.path.exists(split_dir):
             # Try flat structure: split_dir/sample_00000_feat.npy and split_dir/sample_00000_lab.npy
+            print(f"[{self.split}] Standard structure missing. Trying flat structure in: {split_dir}")
             all_files = sorted(os.listdir(split_dir))
             for fname in all_files:
                 if fname.endswith("_feat.npy") or fname.endswith("_features.npy"):
@@ -135,7 +137,10 @@ class SignLanguageDataset(Dataset):
                         "feature_path": os.path.join(split_dir, fname),
                         "label_path": None, # Labels unknown in flat structure without naming convention
                     })
+        else:
+            print(f"[{self.split}] CRITICAL: Folder not found: {split_dir}")
 
+        print(f"[{self.split}] Dataset initialized with {len(samples)} samples.")
         return samples
 
     def __len__(self) -> int:
