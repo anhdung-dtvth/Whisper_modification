@@ -187,13 +187,36 @@ class SignLanguageDataset(Dataset):
 
         # Load features
         try:
-            features = self._load_numpy(sample["feature_path"])  # (T_raw, 42, F)
+            features = self._load_numpy(sample["feature_path"])  # Expected (T_raw, 42, F)
             if not isinstance(features, np.ndarray):
                 raise ValueError(f"Loaded data is not a numpy array: {type(features)}")
+            
+            # Robust self-repair for flattened landmarks
+            if features.ndim == 2:
+                # If data is (T, J*F), reshape back to (T, J, F)
+                if features.shape[1] == self.num_joints * self.num_features:
+                    features = features.reshape(-1, self.num_joints, self.num_features)
+                # Fallback for 3-feature coordinates
+                elif features.shape[1] == self.num_joints * 3:
+                     # If the data only has x,y,z, pad it to match num_features
+                     temp = np.zeros((features.shape[0], self.num_joints, self.num_features), dtype=np.float32)
+                     temp[:, :, :3] = features.reshape(-1, self.num_joints, 3)
+                     features = temp
+                else:
+                    raise ValueError(f"Unexpected 2D feature shape {features.shape}. Expected second dim to be {self.num_joints * self.num_features} or {self.num_joints * 3}")
+            elif features.ndim == 3:
+                # Ensure it matches expected num_features
+                if features.shape[2] != self.num_features:
+                    if features.shape[2] < self.num_features:
+                        temp = np.zeros((features.shape[0], self.num_joints, self.num_features), dtype=np.float32)
+                        temp[:, :, :features.shape[2]] = features
+                        features = temp
+                    else:
+                        features = features[:, :, :self.num_features]
         except Exception as e:
             print(f"Error loading features from {sample['feature_path']}: {e}")
             # Fallback to zero features to avoid crashing the whole training
-            features = np.zeros((10, 42, 7), dtype=np.float32)
+            features = np.zeros((10, self.num_joints, self.num_features), dtype=np.float32)
 
         actual_length = min(features.shape[0], self.max_seq_length)
 
