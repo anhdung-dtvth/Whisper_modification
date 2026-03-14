@@ -22,7 +22,9 @@ How to use:
 USE_GITHUB = True                        # True = clone from GitHub, False = use Kaggle dataset
 GITHUB_REPO = "minhduc110207/Whisper_modification"  # Your GitHub repo
 KAGGLE_DATASET_SLUG = None               # e.g. "yourname/whispersign" if USE_GITHUB=False
-USE_DUMMY_DATA = True                    # True = create synthetic data for testing pipeline
+PROCESS_RAW_KAGGLE_DATA = True           # True = Add 'vsl-vietnamese-sign-languages' via 'Add Data' to process directly on Kaggle
+RAW_KAGGLE_DATA_PATH = "/kaggle/input/vsl-vietnamese-sign-languages"
+USE_DUMMY_DATA = False                    # True = create synthetic data for testing pipeline
 NUM_DUMMY_SAMPLES = 200                  # Number of dummy training samples
 NUM_DUMMY_CLASSES = 50                   # Number of dummy sign classes
 SMALL_MODEL = True                       # True = d_model=256 (faster), False = d_model=512 (full)
@@ -62,9 +64,12 @@ os.chdir(PROJECT_DIR)
 sys.path.insert(0, PROJECT_DIR)
 
 # Install dependencies
+deps = ["scipy", "scikit-learn", "pyyaml", "tqdm", "tensorboard", "matplotlib"]
+if PROCESS_RAW_KAGGLE_DATA:
+    deps.extend(["mediapipe", "opencv-python", "pandas"])
+
 subprocess.run([
-    sys.executable, "-m", "pip", "install", "-q",
-    "scipy", "scikit-learn", "pyyaml", "tqdm", "tensorboard", "matplotlib"
+    sys.executable, "-m", "pip", "install", "-q", *deps
 ], check=True)
 
 # Check GPU
@@ -74,7 +79,7 @@ print(f"PyTorch: {torch.__version__}")
 print(f"CUDA: {torch.cuda.is_available()}")
 if torch.cuda.is_available():
     print(f"GPU: {torch.cuda.get_device_name(0)}")
-    print(f"VRAM: {torch.cuda.get_device_properties(0).total_mem / 1e9:.1f} GB")
+    print(f"VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
 print(f"{'='*50}")
 
 # %% [markdown]
@@ -82,7 +87,8 @@ print(f"{'='*50}")
 
 # %%
 print("Running smoke test...")
-exec(open(os.path.join(PROJECT_DIR, "scripts", "smoke_test.py")).read())
+smoke_test_path = os.path.join(PROJECT_DIR, "scripts", "smoke_test.py")
+exec(open(smoke_test_path).read(), {"__file__": smoke_test_path})
 print("\n✅ Smoke test passed!")
 
 # %% [markdown]
@@ -92,6 +98,24 @@ print("\n✅ Smoke test passed!")
 import numpy as np
 
 DATA_DIR = os.path.join(PROJECT_DIR, "data", "processed")
+
+if PROCESS_RAW_KAGGLE_DATA:
+    print("Processing raw Kaggle video data... This will take some time.")
+    if not os.path.exists(DATA_DIR) or not os.listdir(DATA_DIR):
+        subprocess.run([
+            sys.executable, "scripts/prepare_vsl_data.py", 
+            "--source", "kaggle", 
+            "--data_dir", RAW_KAGGLE_DATA_PATH, 
+            "--output_dir", DATA_DIR, 
+            "--target_fps", "60"
+        ], check=True)
+    else:
+        print("Data is already processed!")
+    
+    import json
+    with open(os.path.join(DATA_DIR, "label_map.json")) as f:
+        NUM_DUMMY_CLASSES = len(json.load(f))
+    USE_DUMMY_DATA = False
 
 if USE_DUMMY_DATA:
     print("Creating synthetic training data...")
@@ -137,12 +161,20 @@ print("\n✅ Data ready!")
 
 # %%
 import yaml
+import json
+import os
 
 d_model = 256 if SMALL_MODEL else 512
 num_heads = 4 if SMALL_MODEL else 8
 num_layers = 4 if SMALL_MODEL else 6
 d_ff = 1024 if SMALL_MODEL else 2048
-vocab_size = NUM_DUMMY_CLASSES if USE_DUMMY_DATA else 1296
+
+label_map_path = os.path.join(DATA_DIR, "label_map.json")
+if os.path.exists(label_map_path):
+    with open(label_map_path) as f:
+        vocab_size = len(json.load(f))
+else:
+    vocab_size = NUM_DUMMY_CLASSES if USE_DUMMY_DATA else 1296
 
 config = {
     "model": {
