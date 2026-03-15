@@ -240,6 +240,9 @@ python scripts/prepare_vsl_data.py --source video --data_dir path/to/videos --la
 
 ### Training
 
+You can train the model locally or take advantage of the automated Kaggle training script.
+
+#### Local Training
 ```bash
 python scripts/train.py --config configs/config.yaml --data_dir data/processed
 
@@ -249,6 +252,13 @@ python scripts/train.py --config configs/config.yaml --stage 3 --resume checkpoi
 
 python scripts/train.py --config configs/config.yaml --device cuda
 ```
+
+#### Kaggle Automated Pipeline
+For fast GPU training, we provide an all-in-one Kaggle notebook script: `scripts/kaggle_notebook.py`. It is designed to be highly automated:
+- Copy the contents of the python file into a single Kaggle notebook cell.
+- Set `USE_GITHUB = True` at the top of the cell.
+- When run, the cell automatically clones this repository into the Kaggle environment `/kaggle/working`. This ensures that any bug fixes pushed to GitHub (e.g. recent fixes to `trainer.py` attention loss) are dynamically pulled and applied without needing to modify the notebook cell itself.
+- **Optimization Note:** The Kaggle script defaults to `max_seq_length = 400` (down from 1500). Because VSL signs typically span 2-6 seconds (120-360 frames at 60Hz), this drastically accelerates Self-Attention compute times without losing data.
 
 For the complete training process, see [TRAINING.md](TRAINING.md).
 
