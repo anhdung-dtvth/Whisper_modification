@@ -100,7 +100,7 @@ flowchart TD
 - **Noise Injection** -- Gaussian noise to simulate sensor inaccuracy
 
 ### Model
-- **4.2M parameters** (base config, d_model=512) -- lightweight enough for real-time inference
+- **55.2M parameters** (default config, d_model=512) -- lightweight enough for real-time inference
 - **Configurable depth** -- Scale from tiny (d_model=128) to large (d_model=768)
 - **Freeze/Unfreeze API** -- Selective component training for transfer learning
 - **Checkpoint save/load** -- Full state persistence including epoch, loss, and config
@@ -136,10 +136,10 @@ flowchart TD
 
 | Config | d_model | Layers | Heads | Params | GPU Memory | Use Case |
 |--------|---------|--------|-------|--------|------------|----------|
-| Tiny | 128 | 2 | 4 | ~1.1M | ~2 GB | Prototyping, edge devices |
-| Base | 256 | 4 | 4 | ~4.2M | ~4 GB | Balanced performance |
-| **Default** | **512** | **6** | **8** | **~18M** | **~8 GB** | **Recommended** |
-| Large | 768 | 8 | 12 | ~45M | ~16 GB | Maximum accuracy |
+| Tiny | 128 | 2 | 4 | ~2M | ~2 GB | Prototyping, edge devices |
+| Base | 256 | 4 | 4 | ~11M | ~4 GB | Balanced performance |
+| **Default** | **512** | **6** | **8** | **~55M** | **~8 GB** | **Recommended (Whisper Base Arch)** |
+| Large | 768 | 8 | 12 | ~158M | ~16 GB | Maximum accuracy |
 
 ### Input Format
 

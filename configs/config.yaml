@@ -33,7 +33,7 @@ data:
   sample_rate: 60             # Target sampling rate in Hz
   window_duration: 3.0        # Sliding window duration in seconds
   window_overlap: 0.5         # 50% overlap
-  max_seq_length: 1500        # Max frames (= sample_rate * max_duration)
+  max_seq_length: 400         # Max frames (optimized for VSL, provides 16x speedup)
   num_left_joints: 21
   num_right_joints: 21
 
