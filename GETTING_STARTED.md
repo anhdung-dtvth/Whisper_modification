@@ -88,6 +88,9 @@ You need sign language videos with labels. Choose **one** of these options:
 
 ### Option A: Kaggle VSL Dataset ⭐ Easiest
 
+> **💡 Can't download because the file is too large?**
+> Skip Phase 2, 3, and 4.2! Go straight to **Phase 4.1: Create Code Dataset** to upload your code, and then to **Phase 5: Train on Kaggle**, where you can add the raw dataset directly to your Notebook and process it in the cloud.
+
 **Step 2A.1** — Go to https://www.kaggle.com/datasets/phamminhhoang/vsl-vietnamese-sign-languages
 
 **Step 2A.2** — Click **Download** (requires free Kaggle account)
@@ -332,12 +335,14 @@ whispersign-data/
 
 1. Click **Add Data** (plus icon on right sidebar)
 2. Search for your `whispersign-code` dataset → **Add**
-3. Search for your `whispersign-data` dataset → **Add**
+3. If you processed data locally, search for your `whispersign-data` dataset → **Add**. 
+   *(Alternatively, if the dataset was too large to download locally, search for `vsl-vietnamese-sign-languages` by `phamminhhoang`, and **Add** it instead).*
 
 After adding, your data will be at:
 ```
-/kaggle/input/whispersign-code/    ← your code (READ-ONLY)
-/kaggle/input/whispersign-data/    ← your data (READ-ONLY)
+/kaggle/input/whispersign-code/                  ← your code
+/kaggle/input/whispersign-data/                  ← your data (if processed locally)
+/kaggle/input/vsl-vietnamese-sign-languages/     ← raw data (if processing on Kaggle)
 ```
 
 ### Step 5.4 — Write the Notebook Cells
@@ -350,6 +355,7 @@ import os, sys, subprocess, shutil
 CODE_SRC = "/kaggle/input/whispersign-code"
 PROJECT  = "/kaggle/working/WhisperSign"
 DATA     = "/kaggle/input/whispersign-data"
+RAW_DATA = "/kaggle/input/vsl-vietnamese-sign-languages/Dataset"
 
 if not os.path.exists(PROJECT):
     shutil.copytree(CODE_SRC, PROJECT)
@@ -358,9 +364,9 @@ if not os.path.exists(PROJECT):
 os.chdir(PROJECT)
 sys.path.insert(0, PROJECT)
 
-# Install missing dependencies
+# Install missing dependencies (including mediapipe and opencv for processing data on Kaggle)
 subprocess.run([sys.executable, "-m", "pip", "install", "-q",
-    "scipy", "scikit-learn", "pyyaml", "tqdm", "tensorboard"], check=True)
+    "scipy", "scikit-learn", "pyyaml", "tqdm", "tensorboard", "mediapipe", "opencv-python"], check=True)
 
 # Verify GPU
 import torch
@@ -368,7 +374,7 @@ print(f"PyTorch: {torch.__version__}")
 print(f"CUDA: {torch.cuda.is_available()}")
 if torch.cuda.is_available():
     print(f"GPU: {torch.cuda.get_device_name(0)}")
-    print(f"VRAM: {torch.cuda.get_device_properties(0).total_mem / 1e9:.1f} GB")
+    print(f"VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
 ```
 
 > **⚠️ Problem: `ModuleNotFoundError` for scipy, sklearn, etc.**
@@ -376,6 +382,32 @@ if torch.cuda.is_available():
 
 > **⚠️ Problem: Path structure is different**
 > Check the actual path by adding: `print(os.listdir("/kaggle/input/"))` and adjust paths accordingly. Kaggle sometimes lowercases or hyphenates dataset names.
+
+**Cell 1.5: Process Raw Data (Optional)**
+*(Only run this cell if you couldn't download the raw dataset locally and added `vsl-vietnamese-sign-languages` directly to Kaggle in Step 5.3!)*
+```python
+import subprocess
+PROCESSED_DATA_DIR = "/kaggle/working/WhisperSign/data/processed"
+
+if os.path.exists(RAW_DATA) and not os.path.exists(PROCESSED_DATA_DIR):
+    print("Dataset too large to download locally? No problem!")
+    print("Processing raw video data on Kaggle... This may take up to an hour.")
+    subprocess.run([
+        sys.executable, "scripts/prepare_vsl_data.py",
+        "--source", "kaggle",
+        "--data_dir", RAW_DATA,
+        "--output_dir", PROCESSED_DATA_DIR,
+        "--target_fps", "60"
+    ], check=True)
+    print("✅ Data processing complete!")
+    DATA = PROCESSED_DATA_DIR
+
+elif os.path.exists(PROCESSED_DATA_DIR):
+    DATA = PROCESSED_DATA_DIR
+    print("Using data processed directly on Kaggle.")
+else:
+    print("Using pre-processed data from whispersign-data dataset.")
+```
 
 **Cell 2: Verify data and configure**
 ```python
