@@ -4,15 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WhisperSign: Cross-Modal Adaptation of Audio Transformers for Vietnamese Sign Language Recognition</title>
-    <script>
-        MathJax = {
-            tex: {
-                inlineMath: [['$', '$'], ['\\(', '\\)']],
-                displayMath: [['$$', '$$'], ['\\[', '\\]']]
-            }
-        };
-    </script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
     <style>
         /* Academic Paper Styling */
         :root {
@@ -170,6 +161,38 @@
             margin-bottom: 10px;
         }
 
+        /* Tensor Diagram */
+        .tensor-diagram {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 10pt;
+            font-style: normal;
+        }
+        .tensor-block {
+            background: #eef2f5;
+            border: 1px solid #baccdd;
+            border-radius: 6px;
+            padding: 12px 18px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .tensor-block b {
+            display: block;
+            color: #0056b3;
+            margin-bottom: 5px;
+            font-family: "Times New Roman", Times, serif;
+            font-size: 11pt;
+        }
+        .tensor-arrow {
+            color: #666;
+            font-size: 18pt;
+            font-weight: bold;
+        }
+
         /* Responsive */
         @media screen and (max-width: 768px) {
             .paper-container {
@@ -206,18 +229,18 @@
     <h2>3. Proposed Methodology</h2>
     
     <h3>3.1 Spatio-Temporal Skeletal Frontend</h3>
-    <p>The standard Whisper architecture transforms raw audio into log-Mel spectrograms. WhisperSign discards this in favor of a <code>SignLanguageFrontend</code> designed to process sparse, high-dimensional kinematic graphs. The input is defined as a tensor \( X_{raw} \in \mathbb{R}^{B \times T \times J \times F} \), where \( J=42 \) represents tracking joints (left and right hands), and \( F=7 \) signifies the feature channels (3D coordinates, 3D velocities, and sensor confidence).</p>
-    <p>To establish a temporal hierarchy compatible with Whisper's standard receptive field, we project \( P=4 \) contiguous frames into a dense patch:</p>
+    <p>The standard Whisper architecture transforms raw audio into log-Mel spectrograms. WhisperSign discards this in favor of a <code>SignLanguageFrontend</code> designed to process sparse, high-dimensional kinematic graphs. The input is defined as a tensor <i>X<sub>raw</sub></i> &isin; &#8477;<sup><i>B</i>&times;<i>T</i>&times;<i>J</i>&times;<i>F</i></sup>, where <i>J</i>=42 represents tracking joints (left and right hands), and <i>F</i>=7 signifies the feature channels (3D coordinates, 3D velocities, and sensor confidence).</p>
+    <p>To establish a temporal hierarchy compatible with Whisper's standard receptive field, we project <i>P</i>=4 contiguous frames into a dense patch:</p>
     <div class="math-block">
         X<sub>patch</sub> = GELU( X<sub>raw</sub> W<sub>reshape</sub> ) W<sub>proj</sub> &nbsp; &isin; &nbsp; &Ropf;<sup> B &times; (T/4) &times; d_model </sup>
     </div>
-    <p>Furthermore, standard absolute sine/cosine positional encodings fail to capture the fluid physics of human motion. Thus, we introduce a Convolutional Spatial-Positional Encoding (ConvSPE) utilizing depthwise-separable 1D convolutions with a wide temporal kernel (\( K=31 \)):</p>
+    <p>Furthermore, standard absolute sine/cosine positional encodings fail to capture the fluid physics of human motion. Thus, we introduce a Convolutional Spatial-Positional Encoding (ConvSPE) utilizing depthwise-separable 1D convolutions with a wide temporal kernel (<i>K</i>=31):</p>
     <div class="math-block">
         X<sub>spe</sub> = X<sub>patch</sub> + Conv1D<sub>point</sub>( GELU( Conv1D<sub>depth</sub>(X<sub>patch</sub>) ) )
     </div>
 
     <h3>3.2 Architecture Integration & Decoder Logic</h3>
-    <p>The core encoder maintains the pre-trained Whisper weights (e.g., \( d_{model} = 512 \), \( N_{heads} = 8 \)). The decoding stage employs a <strong>Hybrid Two-Pass Decoder</strong>:</p>
+    <p>The core encoder maintains the pre-trained Whisper weights (e.g., <i>d<sub>model</sub></i> = 512, <i>N<sub>heads</sub></i> = 8). The decoding stage employs a <strong>Hybrid Two-Pass Decoder</strong>:</p>
     <ol>
         <li><strong>Pass 1 (CTC Decoder):</strong> A shallow linear projection applied to the encoder's output. It enables strict monotonic alignment, solving the issue of blank frame emissions without imposing an autoregressive bottleneck.</li>
         <li><strong>Pass 2 (Attention Decoder):</strong> A 6-layer Transformer decoder that applies cross-attention over the encoder states. It resolves context and local grammar dependencies specific to VSL.</li>
@@ -241,19 +264,19 @@
                 <td>1</td>
                 <td>Frontend Warm-up</td>
                 <td>Frontend Only</td>
-                <td>\( 1.0 \times 10^{-3} \)</td>
+                <td>1.0 &times; 10<sup>-3</sup></td>
             </tr>
             <tr>
                 <td>2</td>
                 <td>Joint Optimization</td>
                 <td>Frontend + Encoder + Decoder</td>
-                <td>\( 5.0 \times 10^{-5} \)</td>
+                <td>5.0 &times; 10<sup>-5</sup></td>
             </tr>
             <tr>
                 <td>3</td>
                 <td>Real-Time Simulation</td>
                 <td>All Modules (with Sliding Window)</td>
-                <td>\( 1.0 \times 10^{-5} \)</td>
+                <td>1.0 &times; 10<sup>-5</sup></td>
             </tr>
         </tbody>
     </table>
@@ -263,28 +286,53 @@
     <div class="math-block">
         L<sub>total</sub> = &alpha; &middot; L<sub>CTC</sub>(Y | X) + (1 - &alpha;) &middot; L<sub>CE</sub>(Y | X, Y<sub>&lt;t</sub>)
     </div>
-    <p>Where \( \alpha \) acts as a regularization scalar. In our empirical testing with VSL, shifting the hierarchy to prioritize contextual inference (\( \alpha = 0.3 \)) yields superior lexical translation over strict temporal frame binding.</p>
+    <p>Where &alpha; acts as a regularization scalar. In our empirical testing with VSL, shifting the hierarchy to prioritize contextual inference (&alpha; = 0.3) yields superior lexical translation over strict temporal frame binding.</p>
 
     <h3>4.3 Stochastic Data Robustization</h3>
     <p>To combat the low-resource constraint of VSL corpora, the dataset loader implements aggressive stochastic spatial-temporal noise models:</p>
     <ul>
-        <li><strong>Joint Masking:</strong> \( 15\% \) of joints are nullified per sequence to emulate sensor occlusion.</li>
-        <li><strong>Temporal Jitter:</strong> Contiguous windows (up to 10 frames) exhibit \( 10\% \) dropout, enforcing continuity assumptions within the ConvSPE module.</li>
-        <li><strong>Gaussian Kinematic Noise:</strong> Given \( \mathcal{N}(0, 0.005) \), noise is injected to emulate infrared precision degradation found in depth sensors.</li>
+        <li><strong>Joint Masking:</strong> 15% of joints are nullified per sequence to emulate sensor occlusion.</li>
+        <li><strong>Temporal Jitter:</strong> Contiguous windows (up to 10 frames) exhibit 10% dropout, enforcing continuity assumptions within the ConvSPE module.</li>
+        <li><strong>Gaussian Kinematic Noise:</strong> Given <i>N</i>(0, 0.005), noise is injected to emulate infrared precision degradation found in depth sensors.</li>
     </ul>
     
     <div class="figure">
-        <div class="figure-box">
-            [Figure 1: Tensor flow through the Spatio-Temporal Skeletal Engine, showcasing the transformation from \( (B, T, 42, 7) \) down into the isolated latent dimension \( (B, T/4, 512) \) prior to the Transformer Encoder.]
+        <div class="figure-box" style="font-style: normal;">
+            <div class="tensor-diagram">
+                <div class="tensor-block">
+                    <b>Raw Skeletal Input</b>
+                    (B, T, 42, 7)
+                </div>
+                <div class="tensor-arrow">&rarr;</div>
+                <div class="tensor-block">
+                    <b>Temporal Patch Embedding</b>
+                    Linear(P&times;J&times;F)
+                </div>
+                <div class="tensor-arrow">&rarr;</div>
+                <div class="tensor-block">
+                    <b>Latent Projection</b>
+                    (B, T/4, d<sub>model</sub>)
+                </div>
+                <div class="tensor-arrow">&rarr;</div>
+                <div class="tensor-block">
+                    <b>ConvSPE Layer</b>
+                    + Rel. Pos Encoding
+                </div>
+                <div class="tensor-arrow">&rarr;</div>
+                <div class="tensor-block">
+                    <b>Transformer Encoder</b>
+                    (B, T/4, d<sub>model</sub>)
+                </div>
+            </div>
         </div>
-        <em>Fig 1. Architectural blueprint of the WhisperSign adaptation phase.</em>
+        <em>Fig 1. Tensor flow through the Spatio-Temporal Skeletal Engine, showcasing the transformation from raw input down into the isolated latent dimension prior to the Transformer Encoder.</em>
     </div>
 
     <h2>5. Experimental Context and Implementation Details</h2>
     <p>The pipeline was constructed using PyTorch. Training was executing iteratively on NVIDIA T4/P100 hardware. Raw input data is parsed from hierarchical structural tensors (e.g. MediaPipe Holistic 543-joint arrays) dynamically downscaled to the explicit 42-joint hand topology necessary for discrete VSL semantics. Checkpointing logic supports modular resumption, although state preservation limits require external tracking of optimizer decay momentum.</p>
 
     <h2>6. Conclusion</h2>
-    <p>We introduced WhisperSign, an architecture demonstrating that large-scale audio ASR models can be efficaciously adapted to skeletal sign language recognition. By carefully staging the training process (Warm-up, Joint, Real-time) and utilizing a hybrid CTC-Attention loss mechanism (\( \alpha=0.3 \)), we mitigate catastrophic forgetting while anchoring the semantic generation capabilities of a transformer onto the spatial-temporal coordinates of Vietnamese Sign Language. Future work will extend real-time validation via concurrent mixed-precision streams.</p>
+    <p>We introduced WhisperSign, an architecture demonstrating that large-scale audio ASR models can be efficaciously adapted to skeletal sign language recognition. By carefully staging the training process (Warm-up, Joint, Real-time) and utilizing a hybrid CTC-Attention loss mechanism (&alpha;=0.3), we mitigate catastrophic forgetting while anchoring the semantic generation capabilities of a transformer onto the spatial-temporal coordinates of Vietnamese Sign Language. Future work will extend real-time validation via concurrent mixed-precision streams.</p>
 
     <h2>References</h2>
     <div class="references">
