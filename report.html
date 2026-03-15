@@ -239,7 +239,14 @@
         X<sub>spe</sub> = X<sub>patch</sub> + Conv1D<sub>point</sub>( GELU( Conv1D<sub>depth</sub>(X<sub>patch</sub>) ) )
     </div>
 
-    <h3>3.2 Architecture Integration & Decoder Logic</h3>
+    <h3>3.2 Pre-Trained Acoustic Encoder</h3>
+    <p>The topological core of the system relies on the pre-trained OpenAI Whisper encoder mechanism. Once the 3D spatial sequences are projected into latent embeddings via the Frontend, they are passed into a deep contextual processor comprised of stacked acoustic transformer blocks.</p>
+    <ul>
+        <li><strong>Multi-Head Self-Attention (MHSA):</strong> The encoder explicitly utilizes standard Transformer self-attention without local masking. Since entire pre-recorded continuous sequences (capped at 400 frames) are ingested concurrently, the encoder achieves total bidirectional receptive context over the entire gesture window. This structure inherently allows the network to correlate early preparatory hand movements with subsequent semantic signs occurring seconds later.</li>
+        <li><strong>Cross-Modal Dimensionality:</strong> The latent arrays are strictly constrained to the dimensional topography natively established during Whisper's massive audio pre-training (e.g., <i>d<sub>model</sub></i> = 512, <i>N<sub>heads</sub></i> = 8). This ensures that while the input modality has shifted from spectrograms to 3D joint coordinate velocities, the learned distributions over semantic continuity remain functionally isomorphic.</li>
+    </ul>
+
+    <h3>3.3 Architecture Integration & Decoder Logic</h3>
     <p>The core encoder maintains the pre-trained Whisper weights (e.g., <i>d<sub>model</sub></i> = 512, <i>N<sub>heads</sub></i> = 8). The decoding stage employs a <strong>Hybrid Two-Pass Decoder</strong>:</p>
     <ol>
         <li><strong>Pass 1 (CTC Decoder):</strong> A shallow linear projection applied to the encoder's output. It enables strict monotonic alignment, solving the issue of blank frame emissions without imposing an autoregressive bottleneck.</li>
