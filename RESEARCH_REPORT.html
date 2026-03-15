@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhisperSign: Spatio-Temporal Transformer for Continuous Sign Language Recognition</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-light: #60a5fa;
+            --secondary: #64748b;
+            --bg: #f8fafc;
+            --text: #0f172a;
+            --card-bg: #ffffff;
+            --border: #e2e8f0;
+            --accent: #3b82f6;
+            --success: #10b981;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #020617;
+                --text: #f1f5f9;
+                --card-bg: #0f172a;
+                --border: #1e293b;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding: 3rem;
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(59, 130, 246, 0.05));
+            border-radius: 2rem;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.75rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+            letter-spacing: -0.025em;
+        }
+
+        .authors {
+            font-size: 1.1rem;
+            color: var(--secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .affiliation {
+            font-style: italic;
+            color: var(--secondary);
+        }
+
+        .abstract {
+            background-color: var(--card-bg);
+            padding: 2rem;
+            border-radius: 1rem;
+            border-left: 5px solid var(--primary);
+            margin-bottom: 3rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .abstract h2 {
+            font-family: 'Outfit', sans-serif;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+
+        section {
+            margin-bottom: 4rem;
+        }
+
+        h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            margin: 2rem 0 1rem;
+            color: var(--primary-light);
+        }
+
+        p {
+            margin-bottom: 1.25rem;
+            font-size: 1.1rem;
+            text-align: justify;
+        }
+
+        ul, ol {
+            margin-left: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            border: 1px solid var(--border);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h4 {
+            margin-bottom: 0.75rem;
+            color: var(--primary);
+        }
+
+        .mermaid {
+            background: #fff;
+            padding: 2rem;
+            border-radius: 1rem;
+            margin: 2rem 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        code {
+            font-family: 'Fira Code', monospace;
+            background-color: rgba(37, 99, 235, 0.1);
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.9em;
+        }
+
+        .math {
+            font-family: serif;
+            font-style: italic;
+            background: transparent;
+            padding: 0;
+        }
+
+        footer {
+            text-align: center;
+            padding: 4rem 0;
+            border-top: 1px solid var(--border);
+            color: var(--secondary);
+            font-size: 0.9rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .badge-primary { background: var(--primary); color: white; }
+        .badge-success { background: var(--success); color: white; }
+
+        @media (max-width: 640px) {
+            body { padding: 1rem; }
+            h1 { font-size: 2rem; }
+            header { padding: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="badge badge-primary">Technical Research Review</div>
+    <h1>WhisperSign: Spatio-Temporal Transformer for Continuous Sign Language Recognition</h1>
+    <div class="authors">Research & Development Division</div>
+    <div class="affiliation">Project WhisperSign Architecture Team</div>
+</header>
+
+<div class="abstract">
+    <h2>Abstract</h2>
+    <p>
+        This report presents <strong>WhisperSign</strong>, a novel architecture adapted from the Whisper transformer for the task of continuous sign language recognition (SLR). Unlike traditional computer vision approaches that utilize raw video pixels, WhisperSign operates on low-dimensional 3D skeletal sequences. We propose a three-stage training pipeline and a hybrid CTC-Attention loss function to bridge the gap between skeletal motion and linguistic representation. Furthermore, we demonstrate real-time inference capabilities using Leap Motion sensors, achieving low-latency recognition suitable for interactive applications.
+    </p>
+</div>
+
+<section id="introduction">
+    <h2>1. Introduction</h2>
+    <p>
+        Sign language recognition (SLR) remains a critical challenge at the intersection of computer vision, linguistics, and human-computer interaction. While recent advances in Large Language Models (LLMs) have revolutionized text processing, sign language requires modeling complex spatio-temporal dependencies in 3D space.
+    </p>
+    <p>
+        WhisperSign is designed to leverage the powerful temporal modeling capabilities of the Transformer architecture while replacing the traditional acoustic frontend with a specialized <strong>Sign Language Frontend</strong>. This allows the model to process 3D joint positions and velocities, effectively treating sign language as a "visual speech" signal.
+    </p>
+</section>
+
+<section id="methodology">
+    <h2>2. Methodology</h2>
+    <h3>2.1 Input Representation</h3>
+    <p>
+        The model accepts inputs as tensors of shape <span class="math">(T, 42, 7)</span>, where <span class="math">T</span> is the number of frames, 42 represents the left and right hand joints (21 each), and 7 features are extracted per joint:
+    </p>
+    <div class="grid">
+        <div class="card">
+            <h4>Spatial Coordinates</h4>
+            <p>Normalized X, Y, Z positions scaled to the hand-centric coordinate system.</p>
+        </div>
+        <div class="card">
+            <h4>Temporal Dynamics</h4>
+            <p>Velocity vectors (Vx, Vy, Vz) computed via numeric gradients to capture motion intensity.</p>
+        </div>
+        <div class="card">
+            <h4>Confidence Scores</h4>
+            <p>Detection reliability metrics to weigh the contribution of each joint during training.</p>
+        </div>
+    </div>
+
+    <h3>2.2 Model Architecture</h3>
+    <div class="mermaid">
+        graph TD
+        A[Skeletal Sequence T, 42, 7] --> B[Spatio-Temporal Frontend]
+        B --> C[Transformer Encoder 6 Layers]
+        C --> D[Hybrid Decoder]
+        D --> E[CTC Head Output]
+        D --> F[Attention Decoder Output]
+        E & F --> G[Joint Inference Logic]
+    </div>
+
+    <p>
+        The architecture consists of three primary modules:
+    </p>
+    <ul>
+        <li><strong>SignLanguageFrontend:</strong> Projects joint data into a latent space using linear layers followed by spatial dropout and temporal patch grouping.</li>
+        <li><strong>SpatioTemporalEncoder:</strong> A 6-layer Transformer encoder modeled after the Whisper-Base architecture, capturing long-range temporal dependencies.</li>
+        <li><strong>TwoPassDecoder:</strong> A hybrid system that uses Connectionist Temporal Classification (CTC) for efficient continuous decoding and an Attention-based decoder for linguistic refinement.</li>
+    </ul>
+</section>
+
+<section id="training">
+    <h2>3. Multi-Stage Training Pipeline</h2>
+    <p>
+        To ensure stable convergence, WhisperSign utilizes a rigorous 3-stage training protocol:
+    </p>
+    <div class="grid">
+        <div class="card">
+            <div class="badge badge-success">Stage 1</div>
+            <h4>Frontend Warm-up</h4>
+            <p>The encoder and decoder are frozen. Only the skeletal embedding layers are trained to align joint distributions with the latent space.</p>
+        </div>
+        <div class="card">
+            <div class="badge badge-success">Stage 2</div>
+            <h4>Joint Training</h4>
+            <p>All parameters are unfrozen. The model is trained using a composite loss function: <span class="math">L = &lambda; &middot; L_CTC + (1 - &lambda;) &middot; L_Att</span>.</p>
+        </div>
+        <div class="card">
+            <div class="badge badge-success">Stage 3</div>
+            <h4>Real-time Optimization</h4>
+            <p>Fine-tuning with increased temporal jitter and gesture masking to improve robustness against real-time sensor noise and variable signing speeds.</p>
+        </div>
+    </div>
+</section>
+
+<section id="robustness">
+    <h2>4. Robustness & Sensor Fusion</h2>
+    <h3>4.1 Automated Skeleton Repair & Feature Engineering</h3>
+    <p>
+        A significant challenge in deployment is the variety of sensor outputs (MediaPipe, Holistic, Kinect, Leap Motion). WhisperSign implements a <strong>Robust Self-Repair</strong> logic within the <code>SignLanguageDataset</code> class that dynamically detects input dimensionality and applies deterministic slicing:
+    </p>
+    <ul>
+        <li><strong>Dual-Hand Standard:</strong> <code>(T, 42, 7)</code> format using MediaPipe Hands convention.</li>
+        <li><strong>Pose + Hands Fusion:</strong> <code>(T, 201)</code> and <code>(T, 225)</code> shapes are automatically reshaped to <code>(T, J_total, 3)</code> and sliced to extract the 42 hand-centric joints, discarding redundant body pose landmarks.</li>
+        <li><strong>Holistic Mapping:</strong> <code>(T, 543)</code> joint inputs are mapped to the 501-542 index range to extract precise hand articulation data.</li>
+    </ul>
+    <p>
+        This repair layer ensures that the <code>SpatioTemporalEncoder</code> always receives a consistent 42-joint input, regardless of whether the data was processed locally or in the cloud.
+    </p>
+
+    <h3>4.2 Real-Time Leap Motion Integration</h3>
+    <p>
+        The project now includes high-frequency (60-120Hz) Leap Motion support via <code>scripts/leap_realtime_inference.py</code>. This bridge script utilizes the <code>LeapMotionAdapter</code> to transform absolute millimeter coordinates into the model's expected hand-centric normalized space.
+    </p>
+</section>
+
+<section id="results">
+    <h2>5. Implementation Progress & Validations</h2>
+    <div class="card">
+        <h4>Current Status: Production Ready</h4>
+        <ul>
+            <li>✅ <strong>Core Architecture:</strong> Transformer-based CTC+Attention hybrid decoder.</li>
+            <li>✅ <strong>Robust Data Loading:</strong> Automated repair for 201-feature shape mismatch.</li>
+            <li>✅ <strong>Cloud Integration:</strong> Standardized <code>kaggle_notebook.py</code> with robust path discovery.</li>
+            <li>✅ <strong>Real-time Bridge:</strong> Sub-second latency inference loop for Leap Motion sensors.</li>
+            <li>✅ <strong>Version Control:</strong> Anchored <code>.gitignore</code> rules ensuring source integrity.</li>
+        </ul>
+    </div>
+</section>
+
+<footer>
+    <p>&copy; 2026 WhisperSign Project. All rights reserved.</p>
+    <p>Generated by Antigravity AI Engine</p>
+</footer>
+
+<script>
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+</script>
+</body>
+</html>
