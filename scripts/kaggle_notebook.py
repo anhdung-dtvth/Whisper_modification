@@ -38,7 +38,7 @@ import sys
 import subprocess
 
 WORK_DIR = "/kaggle/working"
-PROJECT_DIR = os.path.join(WORK_DIR, "WhisperSign")
+PROJECT_DIR = os.path.join(WORK_DIR, "Whisper_modification")
 
 # --- Get the project code ---
 if USE_GITHUB:
@@ -53,19 +53,35 @@ if USE_GITHUB:
         subprocess.run(["git", "pull"], check=True)
 elif KAGGLE_DATASET_SLUG:
     # Copy from Kaggle dataset input
-    dataset_path = f"/kaggle/input/{KAGGLE_DATASET_SLUG.split('/')[-1]}"
+    dataset_name = KAGGLE_DATASET_SLUG.split('/')[-1]
+    dataset_path = f"/kaggle/input/{dataset_name}"
+    
     if os.path.exists(dataset_path):
         if os.path.exists(PROJECT_DIR):
             import shutil
             shutil.rmtree(PROJECT_DIR)
-        subprocess.run(["cp", "-r", dataset_path, PROJECT_DIR], check=True)
-        print(f"Copied dataset from {dataset_path}")
+        
+        # Check if the dataset itself is the project folder or contains it
+        # Sometimes Kaggle nests: /kaggle/input/slug/Whisper_modification/...
+        nested_check = os.path.join(dataset_path, "Whisper_modification")
+        if os.path.exists(nested_check):
+            subprocess.run(["cp", "-r", nested_check, PROJECT_DIR], check=True)
+        else:
+            subprocess.run(["cp", "-r", dataset_path, PROJECT_DIR], check=True)
+        print(f"Copied dataset to {PROJECT_DIR}")
     else:
         print(f"ERROR: Dataset not found at {dataset_path}")
         print("Available inputs:", os.listdir("/kaggle/input/"))
         raise FileNotFoundError(f"Dataset {KAGGLE_DATASET_SLUG} not found")
 
 os.chdir(PROJECT_DIR)
+# Ensure we are at the ROOT of the project (e.g. where src/ exists)
+if not os.path.exists("src"):
+    # If we are one level too deep, move up
+    if os.path.basename(os.getcwd()) == "Whisper_modification" and os.path.exists("../src"):
+         os.chdir("..")
+         PROJECT_DIR = os.getcwd()
+
 if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
 

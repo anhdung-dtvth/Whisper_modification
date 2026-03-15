@@ -187,32 +187,76 @@ class SignLanguageDataset(Dataset):
 
         # Load features
         try:
-            features = self._load_numpy(sample["feature_path"])  # Expected (T_raw, 42, F)
+            features = self._load_numpy(sample["feature_path"])  # Expected (T_raw, J, F)
             if not isinstance(features, np.ndarray):
                 raise ValueError(f"Loaded data is not a numpy array: {type(features)}")
             
-            # Robust self-repair for flattened landmarks
+            # Robust self-repair for skeletal structures
             if features.ndim == 2:
-                # If data is (T, J*F), reshape back to (T, J, F)
-                if features.shape[1] == self.num_joints * self.num_features:
-                    features = features.reshape(-1, self.num_joints, self.num_features)
-                # Fallback for 3-feature coordinates
-                elif features.shape[1] == self.num_joints * 3:
-                     # If the data only has x,y,z, pad it to match num_features
-                     temp = np.zeros((features.shape[0], self.num_joints, self.num_features), dtype=np.float32)
-                     temp[:, :, :3] = features.reshape(-1, self.num_joints, 3)
-                     features = temp
-                else:
-                    raise ValueError(f"Unexpected 2D feature shape {features.shape}. Expected second dim to be {self.num_joints * self.num_features} or {self.num_joints * 3}")
-            elif features.ndim == 3:
-                # Ensure it matches expected num_features
-                if features.shape[2] != self.num_features:
-                    if features.shape[2] < self.num_features:
-                        temp = np.zeros((features.shape[0], self.num_joints, self.num_features), dtype=np.float32)
-                        temp[:, :, :features.shape[2]] = features
-                        features = temp
-                    else:
-                        features = features[:, :, :self.num_features]
+                T_raw, F_total = features.shape
+                
+                # Check known common structures and slice to hands if needed
+                found = False
+                
+                # AGGRESSIVE DEBUG: Print the shape and num_joints to Kaggle logs
+                # print(f"DEBUG: features.shape={features.shape}, num_joints={self.num_joints}")
+                
+                # F_p candidates: 7 (full), 3 (coordinates only)
+                for f_p in [7, 3]:
+                    if F_total % f_p == 0:
+                        j_p = F_total // f_p
+                        
+                        if j_p == self.num_joints:
+                            features = features.reshape(T_raw, j_p, f_p)
+                            found = True
+                        elif j_p == 67 and self.num_joints == 42:
+                            # Standard MediaPipe Pose(25) + Hands(42) -> Slice hands
+                            # Shape (T, 67, 3) -> 201 features
+                            features = features.reshape(T_raw, 67, f_p)[:, 25:, :]
+                            found = True
+                        elif j_p == 75 and self.num_joints == 42:
+                            # Standard MediaPipe Pose(33) + Hands(42) -> Slice hands
+                            features = features.reshape(T_raw, 75, f_p)[:, 33:, :]
+                            found = True
+                        elif j_p == 543 and self.num_joints == 42:
+                            # MediaPipe Holistic: Base(33) + Face(468) + Hands(42)
+                            features = features.reshape(T_raw, 543, f_p)[:, 501:, :]
+                            found = True
+                        elif F_total == 201 and self.num_joints == 42:
+                            # Explicit handle for (T, 201) mapping to 42 joints
+                            # Assuming 25 pose (3 features each) + 42 hands
+                            features = features.reshape(T_raw, 67, 3)[:, 25:, :]
+                            found = True
+                            
+                        if found: break
+                
+                if not found:
+                    # Specific error message to match user experience
+                    expected_294 = self.num_joints * 7
+                    expected_126 = self.num_joints * 3
+                    # Add more info to the error
+                    msg = (f"Unexpected 2D feature shape {features.shape}. "
+                           f"Expected second dim to be {expected_294} or {expected_126}. "
+                           f"Detected j_p={F_total//3 if F_total%3==0 else 'N/A'} for f_p=3.")
+                    raise ValueError(msg)
+
+            # Ensure final feature count (F) matches self.num_features (usually 7)
+            if features.ndim == 3:
+                T, J, F = features.shape
+                if J != self.num_joints:
+                     raise ValueError(f"Joint count mismatch: Got {J}, expected {self.num_joints}")
+                
+                if F != self.num_features:
+                    # Pad or truncate features to match expected count
+                    temp = np.zeros((T, J, self.num_features), dtype=np.float32)
+                    copy_f = min(F, self.num_features)
+                    temp[:, :, :copy_f] = features[:, :, :copy_f]
+                    if copy_f <= 3 and self.num_features >= 7:
+                        temp[:, :, 6] = 1.0 # Set default confidence if missing
+                    features = temp
+            else:
+                raise ValueError(f"Invalid feature dimensions: {features.ndim}")
+
         except Exception as e:
             print(f"Error loading features from {sample['feature_path']}: {e}")
             # Fallback to zero features to avoid crashing the whole training

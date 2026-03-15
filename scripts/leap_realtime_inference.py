@@ -1,0 +1,190 @@
+"""
+WhisperSign — Real-time Leap Motion Inference
+=============================================
+Streams hand tracking data from Leap Motion, normalizes it,
+and runs continuous sign recognition using a sliding window.
+
+Requirements:
+  - Leap Motion Controller + UltraLeap Gemini Software installed
+  - pip install leap-hand-tracking (or use provided mock for testing)
+"""
+import os
+import sys
+import time
+import torch
+import numpy as np
+import argparse
+import yaml
+import json
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.model.whisper_sign import WhisperSignModel
+from src.utils.leap_motion_extract import LeapMotionAdapter
+from src.utils.sliding_window import SlidingWindowInference
+from src.data.normalization import SpatialNormalizer, ScaleNormalizer
+
+def run_inference(args):
+    # 1. Load Config & Label Map
+    print(f"Loading config from {args.config}...")
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    label_map_path = args.label_map or os.path.join("data/processed", "label_map.json")
+    if not os.path.exists(label_map_path):
+        print(f"Error: Label map not found at {label_map_path}")
+        return
+
+    with open(label_map_path, 'r', encoding='utf-8') as f:
+        label_map = json.load(f)
+    id_to_gloss = {v: k for k, v in label_map.items()}
+
+    # 2. Load Model
+    device = args.device if args.device != "auto" else ("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Loading model on {device}...")
+    try:
+        model, _ = WhisperSignModel.load_checkpoint(args.checkpoint, device)
+        model.eval()
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        return
+
+    # 3. Setup Processing Pipeline
+    adapter = LeapMotionAdapter(fps=args.fps)
+    spatial_norm = SpatialNormalizer()
+    scale_norm = ScaleNormalizer()
+    
+    slider = SlidingWindowInference(
+        model,
+        window_duration=args.window_duration,
+        overlap=args.overlap,
+        sample_rate=args.fps, # Standardize to sensor FPS
+        device=device
+    )
+
+    # 4. Leap Motion Connection
+    print("\nConnecting to Leap Motion sensor...")
+    
+    if args.mock:
+        print("Using MOCK Leap Motion data source for testing.")
+        # Simulated hand data generator
+        def mock_leap_generator():
+            while True:
+                # 42 joints, 3 coordinates (mm scale roughly)
+                hands = [{
+                    "type": "right",
+                    "confidence": 1.0,
+                    "palm_position": [0, 200, 0],
+                    "fingers": [{"bones": [{"prev_joint": [0,0,0], "next_joint": [0,0,0]} for _ in range(4)]} for _ in range(5)]
+                }]
+                yield hands
+                time.sleep(1.0 / args.fps)
+        source = mock_leap_generator()
+    else:
+        try:
+            import leap
+            # Open connection
+            connection = leap.Connection()
+            connection.connect()
+            print("Successfully connected to Leap Motion Service.")
+            
+            def leap_generator():
+                while True:
+                    frame = connection.poll()
+                    if frame and frame.hands:
+                        # Convert leap-hand-tracking format to adapter-friendly dict
+                        hands = []
+                        for hand in frame.hands:
+                            h_dict = {
+                                "type": "left" if hand.type == leap.HandType.Left else "right",
+                                "confidence": hand.confidence,
+                                "palm_position": [hand.palm.position.x, hand.palm.position.y, hand.palm.position.z],
+                                "wrist_position": [hand.arm.next_joint.x, hand.arm.next_joint.y, hand.arm.next_joint.z],
+                                "fingers": []
+                            }
+                            for finger in hand.fingers:
+                                f_dict = {"bones": []}
+                                for bone in finger.bones:
+                                    f_dict["bones"].append({
+                                        "prev_joint": [bone.prev_joint.x, bone.prev_joint.y, bone.prev_joint.z],
+                                        "next_joint": [bone.next_joint.x, bone.next_joint.y, bone.next_joint.z]
+                                    })
+                                h_dict["fingers"].append(f_dict)
+                            hands.append(h_dict)
+                        yield hands
+                    else:
+                        yield []
+                    time.sleep(1.0 / args.fps)
+            source = leap_generator()
+            
+        except ImportError:
+            print("Error: 'leap' package not found. Install it with: pip install leap-hand-tracking")
+            print("Falling back to mock mode...")
+            return
+        except Exception as e:
+            print(f"Error connecting to Leap Motion: {e}")
+            return
+
+    # 5. Main Inference Loop
+    print("\nStarting Real-time Inference. Press Ctrl+C to stop.")
+    print("-" * 50)
+    
+    buffer_frames = []
+    window_limit = int(args.window_duration * args.fps)
+    
+    try:
+        last_pred = []
+        
+        for hands in source:
+            # Add frame to adapter buffer
+            adapter.add_frame(hands)
+            
+            # Check if we have enough frames for a window
+            if len(adapter._frame_buffer) >= window_limit:
+                # Get sequence and compute velocities
+                keypoints = adapter.get_sequence(clear_buffer=False)
+                
+                # Slicing the buffer to keep sliding (FIFO style)
+                # Keep the last overlap% for the next window
+                keep_size = int(window_limit * args.overlap)
+                adapter._frame_buffer = adapter._frame_buffer[-keep_size:]
+                
+                # Normalize
+                keypoints = spatial_norm.normalize(keypoints)
+                keypoints = scale_norm.normalize(keypoints)
+                
+                # Infer
+                predictions = slider.model.decode(
+                    torch.from_numpy(keypoints).float().unsqueeze(0).to(device),
+                    torch.tensor([len(keypoints)], device=device)
+                )
+                
+                if predictions and predictions[0]:
+                    gloss_ids = predictions[0]
+                    glosses = [id_to_gloss.get(gid, f"?{gid}") for gid in gloss_ids]
+                    
+                    if glosses != last_pred:
+                        print(f"[{time.strftime('%H:%M:%S')}] Recognized: {' '.join(glosses)}")
+                        last_pred = glosses
+
+    except KeyboardInterrupt:
+        print("\nStopping inference...")
+    finally:
+        if not args.mock:
+            # Cleanup if needed
+            pass
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="WhisperSign Real-time Leap Motion Inference")
+    parser.add_argument("--checkpoint", type=str, required=True, help="Path to model checkpoint (.pt)")
+    parser.add_argument("--config", type=str, default="configs/config.yaml", help="Path to config file")
+    parser.add_argument("--label_map", type=str, help="Path to label_map.json")
+    parser.add_argument("--fps", type=int, default=60, help="Processing frame rate")
+    parser.add_argument("--window_duration", type=float, default=3.0, help="Sliding window size in seconds")
+    parser.add_argument("--overlap", type=float, default=0.5, help="Window overlap ratio")
+    parser.add_argument("--device", type=str, default="auto", help="cuda or cpu")
+    parser.add_argument("--mock", action="store_true", help="Use synthetic data for testing")
+    
+    args = parser.parse_args()
+    run_inference(args)
