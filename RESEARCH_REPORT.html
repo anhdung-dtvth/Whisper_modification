@@ -231,22 +231,35 @@
 
 <section id="methodology">
     <h2>2. Methodology</h2>
-    <h3>2.1 Input Representation</h3>
+    <h3>2.1 Input Representation & Normalization</h3>
     <p>
-        The model accepts inputs as tensors of shape <span class="math">(T, 42, 7)</span>, where <span class="math">T</span> is the number of frames, 42 represents the left and right hand joints (21 each), and 7 features are extracted per joint:
+        The model accepts inputs as tensors of shape <span class="math">(B, T, 42, 7)</span>. Before being processed by the transformer, the signal undergoes a two-step normalization process to achieve spatial and scale invariance:
     </p>
+    <ul>
+        <li><strong>Palm-Centric Spatial Normalization:</strong> 
+            Coordinates are transformed relative to the palm index. For left hand (0-20), the wrist (index 0) is the origin. For right hand (21-41), the wrist (index 21) is the origin.
+            <br><span class="math">P̂ᵢ = Pᵢ - P_palm</span>
+        </li>
+        <li><strong>Bone-Chain Scale Normalization:</strong> 
+            To normalize across users with different hand sizes, a reference bone chain length <span class="math">L_ref</span> is computed using the middle finger chain: 
+            <code>Wrist(0)→MCP(9)→PIP(10)→DIP(11)→TIP(12)</code>.
+            <br><span class="math">P̂ᵢ = Pᵢ / L_ref</span>, where <span class="math">L_ref</span> is the average middle finger bone chain length across the clip.
+        </li>
+    </ul>
+
     <div class="grid">
         <div class="card">
-            <h4>Spatial Coordinates</h4>
-            <p>Normalized X, Y, Z positions scaled to the hand-centric coordinate system.</p>
+            <h4>Feature Vector (F=7)</h4>
+            <p>Each joint contains <code>[x, y, z, vx, vy, vz, conf]</code>. Velocities <code>(vx, vy, vz)</code> are also scaled by <span class="math">L_ref</span> to maintain physical consistency.</p>
         </div>
         <div class="card">
-            <h4>Temporal Dynamics</h4>
-            <p>Velocity vectors (Vx, Vy, Vz) computed via numeric gradients to capture motion intensity.</p>
-        </div>
-        <div class="card">
-            <h4>Confidence Scores</h4>
-            <p>Detection reliability metrics to weigh the contribution of each joint during training.</p>
+            <h4>Augmentation Strategy</h4>
+            <p>To simulate infrared sensor noise and occlusion:</p>
+            <ul>
+                <li><strong>Joint Masking:</strong> 15% probability of zeroing a joint.</li>
+                <li><strong>Temporal Masking:</strong> 10% prob. (max 10 frames).</li>
+                <li><strong>Noise:</strong> Gaussian <span class="math">&sigma;=0.005</span>.</li>
+            </ul>
         </div>
     </div>
 
@@ -272,25 +285,27 @@
 </section>
 
 <section id="training">
-    <h2>3. Multi-Stage Training Pipeline</h2>
+    <h2>3. Multi-Stage Training & Hybrid Loss</h2>
     <p>
-        To ensure stable convergence, WhisperSign utilizes a rigorous 3-stage training protocol:
+        WhisperSign utilizes a dual-objective training strategy to optimize both sequence alignment and linguistic structure. The total loss <span class="math">L</span> is defined as:
+        <br><center><strong><span class="math">L = &alpha; &middot; L_CTC + (1 - &alpha;) &middot; L_Att</span></strong></center>
+        where <span class="math">L_CTC</span> is the Connectionist Temporal Classification loss and <span class="math">L_Att</span> is the Cross-Entropy loss from the autoregressive Attention decoder.
     </p>
     <div class="grid">
         <div class="card">
             <div class="badge badge-success">Stage 1</div>
-            <h4>Frontend Warm-up</h4>
-            <p>The encoder and decoder are frozen. Only the skeletal embedding layers are trained to align joint distributions with the latent space.</p>
+            <h4>Frontend Warm-up (&alpha;=1.0)</h4>
+            <p>Encoder and Decoder are frozen. The model focuses exclusively on learning robust skeletal embeddings via CTC loss.</p>
         </div>
         <div class="card">
             <div class="badge badge-success">Stage 2</div>
-            <h4>Joint Training</h4>
-            <p>All parameters are unfrozen. The model is trained using a composite loss function: <span class="math">L = &lambda; &middot; L_CTC + (1 - &lambda;) &middot; L_Att</span>.</p>
+            <h4>Joint Training (&alpha;=0.3)</h4>
+            <p>All layers are unfrozen. The Attention decoder rescents CTC hypotheses, forcing the model to learn linguistic dependencies.</p>
         </div>
         <div class="card">
             <div class="badge badge-success">Stage 3</div>
-            <h4>Real-time Optimization</h4>
-            <p>Fine-tuning with increased temporal jitter and gesture masking to improve robustness against real-time sensor noise and variable signing speeds.</p>
+            <h4>Inference Tuning</h4>
+            <p>Focuses on temporal jitter robustness and sliding window consistency for real-time deployment.</p>
         </div>
     </div>
 </section>
