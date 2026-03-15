@@ -79,12 +79,12 @@ flowchart TD
 
 | Component | Design Choice | Rationale |
 |-----------|--------------|-----------|
-| **Frontend** | Temporal Patch Embedding (not Conv2D) | Skeletal data is structured (joints x features), not pixels. Patches group P consecutive frames. |
-| **Positional Encoding** | ConvSPE (learned, convolutional) | Hand skeleton has fixed topology. Learned spatial relationships outperform sinusoidal PE. |
+| **Frontend** | Temporal Patch Embedding (not Conv2D) | Skeletal data is structured (joints x features), not pixels. Patches group P consecutive frames: <br> `X_patch = GELU(X_raw * W_reshape) * W_proj` |
+| **Positional Encoding** | ConvSPE (learned, convolutional) | Hand skeleton has fixed topology. Learned spatial relationships outperform sinusoidal PE: <br> `X_spe = X_patch + Conv1D_point(GELU(Conv1D_depth(X_patch)))` |
 | **Encoder Attention** | Dual S-MHSA + T-MHSA (not unified) | Separating spatial and temporal attention allows the model to independently reason about handshape vs motion. |
 | **Temporal Attention** | Relative Positional Encoding (RPE) | Sign dynamics depend on relative timing between movements, not absolute position. |
-| **Decoder** | CTC + Attention (two-pass) | CTC provides fast monotonic alignment. Attention rescoring improves accuracy. Hybrid loss: `L = a*CTC + (1-a)*Attention`. |
-| **Normalization** | Pre-Norm (LayerNorm before attention) | More stable training with deeper networks, better gradient flow. |
+| **Decoder** | CTC + Attention (two-pass) | CTC provides fast monotonic alignment. Attention rescoring improves accuracy. |
+| **Normalization** | Pre-Norm | More stable training with deeper networks, better gradient flow. |
 
 ---
 
@@ -108,9 +108,17 @@ flowchart TD
 ### Training
 - **3-Stage Progressive Training**
   - Stage 1: Frontend warm-up (encoder + decoder frozen)
-  - Stage 2: Joint training with hybrid CTC-Attention loss
+  - Stage 2: Joint training with hybrid loss
   - Stage 3: Real-time optimization with sliding window augmentation
-- **Hybrid CTC-Attention Loss** with configurable weight
+- **Hybrid Objective Function** 
+  - The model evaluates a compound objective function to balance temporal alignment and grammatical context:
+  - `L_total = α * L_CTC + (1 - α) * L_CE`
+  - **Connectionist Temporal Classification (L_CTC):** Enforces local monotonic alignment by summing over all valid paths: <br> `L_CTC = -ln ∑ P(π | X)`
+  - **Cross-Entropy Attention (L_CE):** Resolves global grammar and syntax via autoregressive negative log-likelihood: <br> `L_CE = - ∑ ln P(y_t | y_<t, X)`
+- **Stochastic Data Robustization**
+  - **Joint Masking:** 15% probability of zeroing entire joints to simulate occlusion.
+  - **Temporal Jitter:** Contiguous segments (up to 10 frames) exhibit dropout to enforce temporal continuity.
+  - **Kinematic Noise:** Gaussian noise `N(0, 0.005)` injected to simulate sensor precision degradation.
 - **Cosine Warmup Scheduler** -- Linear warmup followed by cosine annealing
 - **Gradient Clipping** -- Prevents training instability
 - **TensorBoard Logging** -- Real-time loss and metric visualization
