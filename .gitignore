@@ -28,7 +28,7 @@ desktop.ini
 # Project artifacts
 checkpoints/
 logs/
-data/
+/data/
 *.pt
 *.pth
 
