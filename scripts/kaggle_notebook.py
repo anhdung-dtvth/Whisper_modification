@@ -328,7 +328,7 @@ config = {
     },
     "data": {
         "sample_rate": 60,
-        "max_seq_length": 1500,
+        "max_seq_length": 400,  # 📉 Reduced from 1500. 400 frames = ~6.6 seconds (plenty for VSL). Massive speedup!
         "num_left_joints": 21,
         "num_right_joints": 21,
         "augmentation": {
@@ -369,7 +369,7 @@ config = {
         "warmup_steps": 500,
         "grad_clip": 1.0,
         "seed": 42,
-        "num_workers": 2,
+        "num_workers": 4,  # Increased from 2 to 4 to speed up data loading
         "save_dir": os.path.join(PROJECT_DIR, "checkpoints"),
         "log_dir": os.path.join(PROJECT_DIR, "logs"),
     },
