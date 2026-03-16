@@ -60,7 +60,7 @@ data:
 training:
   # Stage 1: Warm-up Frontend
   stage1:
-    epochs: 30
+    epochs: 10
     lr: 1.0e-3
     weight_decay: 1.0e-4
     batch_size: 32
@@ -69,7 +69,7 @@ training:
 
   # Stage 2: Joint Training
   stage2:
-    epochs: 100
+    epochs: 30
     lr: 5.0e-5
     weight_decay: 1.0e-4
     batch_size: 16
@@ -78,7 +78,7 @@ training:
 
   # Stage 3: Real-time Optimization
   stage3:
-    epochs: 30
+    epochs: 10
     lr: 1.0e-5
     weight_decay: 1.0e-5
     batch_size: 16

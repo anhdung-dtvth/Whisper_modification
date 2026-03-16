@@ -80,6 +80,7 @@ class WhisperSignTrainer:
                 labels=labels,
                 output_lengths=outputs["output_lengths"],
                 label_lengths=label_lengths,
+                att_targets=labels,  # PASS LABELS AS ATTENTION TARGETS
             )
 
             loss = loss_dict["total"]
@@ -110,6 +111,7 @@ class WhisperSignTrainer:
                 "loss": f"{loss.item():.4f}",
                 "ctc": f"{loss_dict['ctc'].item():.4f}",
                 "lr": f"{optimizer.param_groups[0]['lr']:.2e}",
+                "lab_len": int(label_lengths.sum()),
             })
 
         return total_loss / max(num_batches, 1)

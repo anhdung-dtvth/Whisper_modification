@@ -158,7 +158,19 @@ class SignLanguageDataset(Dataset):
                     "class_id": class_id,
                 })
 
-        print(f"[{self.split}] Total samples found: {len(samples)}")
+        num_path_labels = sum(1 for s in samples if s["label_path"])
+        num_class_labels = sum(1 for s in samples if s["class_id"] is not None)
+        num_unlabeled = sum(1 for s in samples if s["label_path"] is None and s["class_id"] is None)
+
+        print(f"[{self.split}] Summary:")
+        print(f"  - Total samples: {len(samples)}")
+        print(f"  - Labeled via path: {num_path_labels}")
+        print(f"  - Labeled via class_id: {num_class_labels}")
+        print(f"  - UNLABELED: {num_unlabeled}")
+
+        if num_unlabeled == len(samples) and len(samples) > 0:
+            print(f"[{self.split}] CRITICAL ERROR: 100% of samples are unlabeled! Check folder names vs label_map.json.")
+        
         if samples and all(s["class_id"] is None and s["label_path"] is None for s in samples[:100]):
             print(f"[{self.split}] WARNING: No labels found for first 100 samples. Check folder names vs label_map.json.")
             if self.label_map:
