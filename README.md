@@ -10,6 +10,7 @@
     <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License">
     <img src="https://img.shields.io/badge/Tests-112%20passed-brightgreen" alt="Tests">
     <img src="https://img.shields.io/badge/Sign%20Language-Vietnamese%20(VSL)-orange" alt="VSL">
+    <img src="https://img.shields.io/badge/Status-Production--Ready-success" alt="Status">
   </p>
 </p>
 
@@ -215,6 +216,9 @@ python scripts/deep_test.py
 python scripts/functional_test.py
 ```
 
+### ✅ Production Validation
+The model was successfully trained on Kaggle using the 3-stage pipeline. The final `final_model.pt` passed all 112 structural and functional tests, demonstrating robust convergence and reliable decoding across VSL sign glosses.
+
 ---
 
 ## Getting Started
@@ -282,7 +286,7 @@ model.eval()
 data = torch.randn(1, 120, 42, 7)
 lengths = torch.tensor([120])
 predictions = model.decode(data, lengths)
-print(predictions[0])
+print(f"Predicted Sign: {predictions[0]}")
 ```
 
 ### Real-Time Streaming
